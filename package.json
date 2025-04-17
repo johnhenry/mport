@@ -1,11 +1,21 @@
 {
   "name": "mport",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A lightweight utility for dynamically importing ES modules from npm CDNs (jsDelivr, JSPM, Unpkg) with race conditions for fastest response.",
   "homepage": "https://github.com/johnhenry/mport",
   "author": "John Henry <john@iamjohnhenry.com>",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/types.d.ts",
+      "default": "./src/index.mjs"
+    },
+    "./firefox": {
+      "types": "./src/types.d.ts",
+      "default": "./src/firefox.mjs"
+    }
   },
   "keywords": [
     "import",
@@ -18,16 +28,18 @@
     "race",
     "dynamic-import"
   ],
-  "main": "index.mjs",
+  "main": "src/index.mjs",
   "module": "index.mjs",
-  "types": "types.d.ts",
+  "types": "src/types.d.ts",
   "files": [
-    "index.mjs",
-    "demo.mjs",
-    "types.d.ts"
+    "src/index.mjs",
+    "src/demo.mjs",
+    "src/types.d.ts"
   ],
   "scripts": {
-    "demo": "node demo.mjs",
+    "demo": "deno -A examples/demo.mjs",
+    "demo:firefox": "deno -A examples/demo.firefox.mjs",
+    "demo:html": "live-server .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "license": "MIT"

@@ -15,13 +15,13 @@ npm install mport
 
 Unironically, the best way to install MPort in the browser is to use a CDN. You can import it directly in your HTML file:
 
-- https://cdn.jsdelivr.net/npm/mport@0.0.2/index.mjs
-- https://ga.jspm.io/npm:mport@0.0.2/index.mjs
-- https://unpkg.com/mport@0.0.2/index.mjs
+- https://cdn.jsdelivr.net/npm/mport@0.0.3/index.mjs
+- https://ga.jspm.io/npm:mport@0.0.3/index.mjs
+- https://unpkg.com/mport@0.0.3/index.mjs
 
 ```html
 <script type="module">
-  import { MPort } from "https://cdn.jsdelivr.net/npm/mport@0.0.2/index.mjs";
+  import { MPort } from "https://cdn.jsdelivr.net/npm/mport@0.0.3/index.mjs";
   const mport = MPort();
   const { default: _ } = await mport("lodash-es@4.17.21");
 </script>
@@ -45,7 +45,7 @@ const module = await mport({
 });
 ```
 
-with url:
+With chosen url:
 
 ```js
 import { MPortURL as MPort } from "mport";
@@ -97,11 +97,32 @@ MPortURL functions similarly to MPort, but returns a tuple of the imported modul
 
 MPort does not handle caching and relies on the runtime's underlying caching mechanisms.
 
-## Compatibility
+## Module Compatibility
 
 MPort is designed for modern Ecmascript modules. It may not work using CommonJS modules.
 
 e.g. Use "lodash-es" instead of "lodash".
+
+## Firefox Compatibility
+
+Currently, this does not work with Firefox.
+Adding a second argument to import causes an error: `Uncaught SyntaxError: missing )`
+
+I suspect that this is an issue with SpiderMonkey's static analysis/compilations as it occurs even when not on the executable path.
+
+This makes it particularly difficult to work around, so there is a separate export for Firefox, `mport/firefox` that lacks two features:
+
+    - automatic path resolution -- you must specify the path to the main file within the module
+
+    - ability to pass an options object to the import function
+
+The API is otherwise identical
+
+```javascript
+import MPort from "mport/firefox";
+const mport = MPort();
+const module = await mport("lodash-es@4.17.21/src/index.mjs");
+```
 
 ## TypeScript
 

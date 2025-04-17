@@ -1,15 +1,5 @@
-//
-const raceWhich = async (queue) => {
-  let [completed] = await Promise.race(queue.map((p) => p.then((res) => [p])));
-  const index = queue.findIndex((p) => p === completed);
-  return [await completed, index];
-};
-
-const DEFAULT_ORIGINS = [
-  "cdn.jsdelivr.net/npm/",
-  "ga.jspm.io/npm:",
-  "unpkg.com/",
-];
+import raceWhich from "./race-which.mjs";
+import { DEFAULT_ORIGINS } from "./config.mjs";
 
 const MPortURL = (...inputs) => {
   const origins = inputs.length ? inputs : DEFAULT_ORIGINS;
