@@ -1,0 +1,34 @@
+{
+  "name": "mport",
+  "version": "0.0.1",
+  "description": "A lightweight utility for dynamically importing ES modules from npm CDNs (jsDelivr, JSPM, Unpkg) with race conditions for fastest response.",
+  "homepage": "https://github.com/johnhenry/mport",
+  "author": "John Henry <john@iamjohnhenry.com>",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "import",
+    "esm",
+    "npm",
+    "cdn",
+    "jsdelivr",
+    "jspm",
+    "unpkg",
+    "race",
+    "dynamic-import"
+  ],
+  "main": "index.mjs",
+  "module": "index.mjs",
+  "types": "types.d.ts",
+  "files": [
+    "index.mjs",
+    "demo.mjs",
+    "types.d.ts"
+  ],
+  "scripts": {
+    "demo": "node demo.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "license": "MIT"
+}

@@ -11,12 +11,12 @@ const DEFAULT_ORIGINS = [
   "unpkg.com/",
 ];
 
-const MPort = (...inputs) => {
+const MPortURL = (...inputs) => {
   const origins = inputs.length ? inputs : DEFAULT_ORIGINS;
-  return async (stringOrObject) => {
+  return async (stringOrObject, importOptions) => {
     let name, path, version;
     if (typeof stringOrObject === "object") {
-      ({ name, path, version = "latest" } = stringOrObject);
+      ({ name, version = "latest", path } = stringOrObject);
     } else {
       const [n, ...rest] = stringOrObject.split("@");
       name = n;
@@ -28,7 +28,9 @@ const MPort = (...inputs) => {
       const urls = origins.map(
         (origin) => `https://${origin}${name}@${version}/${path}`
       );
-      const [result, index] = await raceWhich(urls.map((url) => import(url)));
+      const [result, index] = await raceWhich(
+        urls.map((url) => import(url, importOptions))
+      );
       return [result, urls[index]];
     } else {
       // import package.json and get .main export
@@ -46,10 +48,21 @@ const MPort = (...inputs) => {
       const urlWithoutPackageJson = targetURL.slice(0, lastIndexOfPackageJson);
       const mainPath = main.startsWith("./") ? main.slice(2) : main;
       const mainURL = `${urlWithoutPackageJson}/${mainPath}`;
-      const mainResult = await import(mainURL);
+      const mainResult = await import(mainURL, importOptions);
       return [await mainResult, mainURL];
     }
   };
 };
+
+// Like MPort, but returns the raw import result without the URL
+const MPort = (...inputs) => {
+  const mport = MPortURL(...inputs);
+  return async (...args) => {
+    const [result] = await mport(...args);
+    return result;
+  };
+};
+
+export { MPort, MPortURL };
 
 export default MPort;
