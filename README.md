@@ -15,13 +15,13 @@ npm install mport
 
 Unironically, the best way to install MPort in the browser is to use a CDN. You can import it directly in your HTML file:
 
-- https://cdn.jsdelivr.net/npm/mport@0.0.1/src/index.mjs
-- https://ga.jspm.io/npm:mport@0.0.1/src/index.mjs
-- https://unpkg.com/mport@0.0.1/src/index.mjs
+- https://cdn.jsdelivr.net/npm/mport@0.0.2/index.mjs
+- https://ga.jspm.io/npm:mport@0.0.2/index.mjs
+- https://unpkg.com/mport@0.0.2/index.mjs
 
 ```html
 <script type="module">
-  import { MPort } from "https://cdn.jsdelivr.net/npm/mport@0.0.1/src/index.mjs";
+  import { MPort } from "https://cdn.jsdelivr.net/npm/mport@0.0.2/index.mjs";
   const mport = MPort();
   const { default: _ } = await mport("lodash-es@4.17.21");
 </script>
