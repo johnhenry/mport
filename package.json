@@ -1,6 +1,6 @@
 {
   "name": "mport",
-  "version": "0.0.3",
+  "version": "1.0.0",
   "description": "A lightweight utility for dynamically importing ES modules from npm CDNs (jsDelivr, JSPM, Unpkg) with race conditions for fastest response.",
   "homepage": "https://github.com/johnhenry/mport",
   "author": "John Henry <john@iamjohnhenry.com>",

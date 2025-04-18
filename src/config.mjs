@@ -3,3 +3,4 @@ export const DEFAULT_ORIGINS = [
   "ga.jspm.io/npm:",
   "unpkg.com/",
 ];
+export const DEFAULT_CACHE_KEY = "mport-cache";

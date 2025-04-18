@@ -7,36 +7,45 @@ MPort is a lightweight ESM utility for dynamically importing modules from npm CD
 
 ## Installation
 
-```bash
-npm install mport
-```
-
-### Browser
-
 Unironically, the best way to install MPort in the browser is to use a CDN. You can import it directly in your HTML file:
 
-- https://cdn.jsdelivr.net/npm/mport@0.0.3/index.mjs
-- https://ga.jspm.io/npm:mport@0.0.3/index.mjs
-- https://unpkg.com/mport@0.0.3/index.mjs
+- https://cdn.jsdelivr.net/npm/mport@1.0.0/index.mjs
+- https://ga.jspm.io/npm:mport@1.0.0/index.mjs
+- https://unpkg.com/mport@1.0.0/index.mjs
 
 ```html
 <script type="module">
-  import { MPort } from "https://cdn.jsdelivr.net/npm/mport@0.0.3/index.mjs";
-  const mport = MPort();
+  import mport from "https://cdn.jsdelivr.net/npm/mport@1.0.0/index.mjs";
   const { default: _ } = await mport("lodash-es@4.17.21");
 </script>
 ```
 
+But it's also available directly as an npm packaged.
+
+```bash
+npm install mport
+```
+
 ## Usage
 
-```js
-import MPort from "mport";
+Use default export, `import` in the same way that you would use dynamic `import()`:
 
-const mport = MPort();
+```javascript
+import mport from "...";
+// Import by specifier string: 'package@version[/path]'
+const { default } = await mport("lodash-es@4.17.21");
+```
+
+Create custom mport function by defining CDN origins:
+
+```javascript
+import { MPort } from "...";
+const mport = MPort({
+  cdns: ["cdn.jsdelivr.net/npm/", "ga.jspm.io/npm:", "unpkg.com/"],
+});
 // Import by specifier string: 'package@version[/path]'
 const module = await mport("lodash-es@4.17.21");
 console.log(module); // The imported module namespace
-
 // Import with options object
 const module = await mport({
   name: "spintax",
@@ -47,12 +56,11 @@ const module = await mport({
 
 With chosen url:
 
-```js
-import { MPortURL as MPort } from "mport";
+```javascript
+import { MPortURL as MPort } from "...";
 const mport = MPort();
 const [module, url] = await mport("lodash-es@4.17.21");
 console.log(url); // The CDN URL that succeeded first
-console.log(module); // The imported module namespace
 ```
 
 ### Custom Origins
@@ -60,20 +68,23 @@ console.log(module); // The imported module namespace
 Pass one or more custom CDN origins to the factory:
 
 ```js
-const mportCustom = MPort(
-  "https://my.cdn.example.com/",
-  "https://another.cdn/"
-);
+const mportCustom = MPort("my.cdn.example.com/", "another.cdn/");
 ```
+
+For security, we this library prepends the origins with `https://`
 
 ## API
 
-### MPort(...origins)
+### MPort({cdns, useCache, cacheKey='mport-cache'})
 
-- `origins` (string[]): Optional list of CDN origin prefixes. Defaults to:
-  - `cdn.jsdelivr.net/npm/`
-  - `ga.jspm.io/npm:`
-  - `unpkg.com/`
+- `cdns` (string[]): Optional list of CDN origin prefixes. Defaults to:
+  - `'cdn.jsdelivr.net/npm/'`
+  - `'ga.jspm.io/npm:'`
+  - `'unpkg.com/'`
+- `useCache` (string): Name of cache to use. Options:`'localhost'`, undefined
+  - `'localhost'`: Use the browser's localStorage to cache the module.
+  - `undefined`: Use the browser's cache.
+- `cacheKey` (string): Key to use for the cache. Defaults to `'mport-cache'`.
 - Returns: A function `(input) => Promise<module>`.
 
 #### Input
@@ -92,10 +103,6 @@ A `Promise` that resolves to a `module` (any): The imported ES module namespace.
 ### MPortURL(...origins)
 
 MPortURL functions similarly to MPort, but returns a tuple of the imported module and the URL used: A function `(input) => Promise<[module, url]>`.
-
-## Caching
-
-MPort does not handle caching and relies on the runtime's underlying caching mechanisms.
 
 ## Module Compatibility
 
@@ -119,8 +126,7 @@ This makes it particularly difficult to work around, so there is a separate expo
 The API is otherwise identical
 
 ```javascript
-import MPort from "mport/firefox";
-const mport = MPort();
+import mport from "mport/firefox";
 const module = await mport("lodash-es@4.17.21/src/index.mjs");
 ```
 
