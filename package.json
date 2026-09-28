@@ -1,46 +1,29 @@
 {
   "name": "mport",
-  "version": "1.0.0",
-  "description": "A lightweight utility for dynamically importing ES modules from npm CDNs (jsDelivr, JSPM, Unpkg) with race conditions for fastest response.",
+  "version": "2.0.0",
+  "description": "Route JavaScript imports across any number of CDNs: deterministic resolution, adaptive transport (fallback, race, weighted, health-aware), compiled to standard import maps.",
   "homepage": "https://github.com/johnhenry/mport",
+  "repository": { "type": "git", "url": "git+https://github.com/johnhenry/mport.git" },
   "author": "John Henry <john@iamjohnhenry.com>",
-  "engines": {
-    "node": ">=18.0.0"
-  },
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=18.0.0" },
+  "main": "./src/index.mjs",
+  "module": "./src/index.mjs",
+  "types": "./src/types.d.ts",
   "exports": {
-    ".": {
-      "types": "./src/types.d.ts",
-      "default": "./src/index.mjs"
-    },
-    "./firefox": {
-      "types": "./src/types.d.ts",
-      "default": "./src/firefox.mjs"
-    }
+    ".": { "types": "./src/types.d.ts", "default": "./src/index.mjs" },
+    "./firefox": { "types": "./src/types.d.ts", "default": "./src/firefox.mjs" },
+    "./core": { "types": "./src/types.d.ts", "default": "./src/core.mjs" },
+    "./package.json": "./package.json"
   },
-  "keywords": [
-    "import",
-    "esm",
-    "npm",
-    "cdn",
-    "jsdelivr",
-    "jspm",
-    "unpkg",
-    "race",
-    "dynamic-import"
-  ],
-  "main": "src/index.mjs",
-  "module": "index.mjs",
-  "types": "src/types.d.ts",
-  "files": [
-    "src/index.mjs",
-    "src/demo.mjs",
-    "src/types.d.ts"
-  ],
+  "bin": { "mport": "./bin/mport.mjs" },
+  "files": ["src", "bin", "README.md", "LICENSE.md"],
+  "keywords": ["import", "esm", "import-map", "importmap", "npm", "jsr", "cdn", "jsdelivr", "esm.sh", "jspm", "unpkg", "router", "fallback", "race", "dynamic-import"],
   "scripts": {
+    "test": "node --test \"test/*.test.mjs\"",
     "demo": "deno -A examples/demo.mjs",
     "demo:firefox": "deno -A examples/demo.firefox.mjs",
-    "demo:html": "live-server .",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "license": "MIT"
+    "demo:html": "python3 -m http.server 8712"
+  }
 }

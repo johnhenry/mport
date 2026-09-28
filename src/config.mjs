@@ -1,6 +1,2 @@
-export const DEFAULT_ORIGINS = [
-  "cdn.jsdelivr.net/npm/",
-  "ga.jspm.io/npm:",
-  "unpkg.com/",
-];
-export const DEFAULT_CACHE_KEY = "mport-cache";
+export { DEFAULT_ORIGINS } from "./providers.mjs";
+export { DEFAULT_CACHE_KEY } from "./v1.mjs";

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mport v2 router</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #fbfbfa; --fg: #1d1d1b; --muted: #6b6b66; --line: #deddd7; --ok: #1f7a4d; --fail: #b3261e; --skip: #8a6d00; --accent: #3b5bdb; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #161615; --fg: #ecebe6; --muted: #9c9b95; --line: #33332f; --ok: #5cc48d; --fail: #ff8a80; --skip: #e3c55b; --accent: #8ea4ff; } }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+    main { max-width: 60rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+    h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+    p.lead { color: var(--muted); margin: 0 0 1.5rem; }
+    section { border-top: 1px solid var(--line); padding: 1rem 0; }
+    h2 { font-size: 1rem; margin: 0 0 .5rem; }
+    code, pre { font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    pre { background: color-mix(in srgb, var(--fg) 5%, transparent); padding: .75rem; border-radius: 6px; overflow-x: auto; margin: .5rem 0; }
+    ol.trace { list-style: none; padding: 0; margin: .5rem 0; }
+    ol.trace li { display: grid; grid-template-columns: 4.5rem minmax(0, 11rem) minmax(0, 1fr) 4rem; gap: .5rem; padding: .15rem 0; border-bottom: 1px dashed var(--line); font: 13px ui-monospace, monospace; }
+    ol.trace li span { overflow-wrap: anywhere; min-width: 0; }
+    ol.trace li span:last-child { text-align: right; color: var(--muted); }
+    .ok { color: var(--ok); } .fail { color: var(--fail); } .skip, .aborted { color: var(--skip); } .probe { color: var(--muted); }
+    .url { overflow-wrap: anywhere; }
+    button { font: inherit; padding: .35rem .8rem; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 6px; cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    @media (max-width: 40rem) { ol.trace li { grid-template-columns: 4.5rem 1fr; } ol.trace li .url { grid-column: 1 / -1; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>mport v2 — routing imports across CDNs</h1>
+  <p class="lead">Every section below runs live against the real CDNs and shows the resolution trace: which providers were probed, skipped, failed or aborted, and which one won.</p>
+
+  <section id="race"><h2>race(jsDelivr, jspm, unpkg) — the v1 default, via <code>MPortURL</code></h2><button>Run</button><div class="out"></div></section>
+  <section id="fallback"><h2>fallback with a dead mirror first</h2><pre>{ "*": [custom("https://dead.invalid/"), esmSh(), jsDelivr()] }</pre><button>Run</button><div class="out"></div></section>
+  <section id="routing"><h2>per-namespace routing + an import map</h2><pre>{ "*": esmSh(), "@std/*": jsr(), "lit*": jsDelivr() }</pre><button>Run</button><div class="out"></div></section>
+  <section id="import"><h2>router.import() — runtime failover</h2><pre>{ "*": [custom("https://dead.invalid/{name}@{version}/{entry}", { build: "npm" }), unpkg()] }  // probe: "none"</pre><button>Run</button><div class="out"></div></section>
+</main>
+<script type="module">
+  import { MPortURL, createRouter, esmSh, jsDelivr, unpkg, jsr, custom } from "../src/index.mjs";
+
+  const h = (tag, attrs = {}, ...kids) => {
+    const el = Object.assign(document.createElement(tag), attrs);
+    el.append(...kids);
+    return el;
+  };
+  const traceList = (trace = []) => h("ol", { className: "trace" }, ...trace.map((e) =>
+    h("li", {}, h("span", { className: e.type, textContent: e.type }), h("span", { textContent: e.provider }),
+      h("span", { className: "url", textContent: e.url ?? e.reason ?? e.error ?? "" }), h("span", { textContent: e.ms != null ? `${Math.round(e.ms)} ms` : "" }))));
+  const show = (id, ...nodes) => document.querySelector(`#${id} .out`).replaceChildren(...nodes);
+  const pre = (v) => h("pre", { textContent: typeof v === "string" ? v : JSON.stringify(v, null, 2) });
+  const fail = (id) => (e) => show(id, pre(`${e.name}: ${e.message}`), traceList(e.trace));
+
+  const demos = {
+    async race() {
+      const [mod, url, info] = await MPortURL()("lodash-es@4.17.21/lodash.js");
+      show("race", pre(`winner: ${url}\n_.chunk([1,2,3,4], 2) → ${JSON.stringify(mod.default.chunk([1, 2, 3, 4], 2))}`), traceList(info.trace));
+    },
+    async fallback() {
+      const router = createRouter({ "*": [custom("https://dead.invalid/"), esmSh(), jsDelivr()] });
+      const r = await router.resolve("nanoid@^5");
+      show("fallback", pre(`nanoid@^5 → ${r.version} via ${r.provider}\n${r.url}`), traceList(r.trace));
+    },
+    async routing() {
+      const router = createRouter({ "*": esmSh(), "@std/*": jsr(), "lit*": jsDelivr() }, { probe: "none" });
+      const { importMap, lock } = await router.build(["preact@^10", "@std/path@^1", "lit@^3/"]);
+      show("routing", pre(importMap), pre(lock));
+    },
+    async import() {
+      const router = createRouter({ "*": [custom("https://dead.invalid/{name}@{version}/{entry}", { build: "npm" }), unpkg()] }, { probe: "none" });
+      const events = [];
+      const mod = await router.import("dayjs@1.11.13/esm/index.js", { onEvent: (e) => events.push(e) });
+      show("import", pre(`dayjs().year() → ${mod.default().year()}\nhealth: ${JSON.stringify(router.health.snapshot())}`), traceList(events));
+    },
+  };
+  for (const [id, run] of Object.entries(demos)) {
+    const btn = document.querySelector(`#${id} button`);
+    btn.onclick = () => { show(id, pre("running…")); run().catch(fail(id)); };
+    btn.click();
+  }
+</script>
+</body>
+</html>

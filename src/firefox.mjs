@@ -1,67 +1,18 @@
-import raceWhich from "./race-which.mjs";
-import { DEFAULT_ORIGINS, DEFAULT_CACHE_KEY } from "./config.mjs";
+// Firefox entry point. Older SpiderMonkey rejects any two-argument import()
+// at parse time, so this file (and everything it imports) uses only the
+// one-argument form. package.json files are fetched instead of imported, so
+// path-less specifiers work here too; per-call import options are ignored.
+import { createV1 } from "./v1.mjs";
 
-const MPortURL = (
-  { cdns = [], cacheKey = DEFAULT_CACHE_KEY, useCache } = {
-    cdns: DEFAULT_ORIGINS,
-  }
-) => {
-  const origins = (cdns.length ? cdns : DEFAULT_ORIGINS).map((origin) =>
-    typeof origin === "string" ? { path: origin } : origin
-  );
-  return async (stringOrObject) => {
-    let name, path, version;
-    if (typeof stringOrObject === "object") {
-      ({ name, version, path } = stringOrObject);
-    } else {
-      const [n, ...rest] = stringOrObject.split("@");
-      name = n;
-      const [v, ...p] = rest.join("/").split("/");
-      version = v;
-      path = p.join("/");
-    }
-    if (useCache === "localhost") {
-      // check local host for cached url and remove other origins
-      const localCache = localStorage.getItem(cacheKey);
-      if (localCache) {
-        const localCacheParsed = JSON.parse(localCache);
-        const localCacheURL = localCacheParsed[cacheName];
-        if (localCacheURL) {
-          const url = new URL(localCacheURL);
-          const origin = origins.find((o) => o.path === url.host);
-          if (origin) {
-            return [await import(localCacheURL, importOptions), localCacheURL];
-          }
-        }
-      }
-    }
-    const urls = origins.map(
-      (origin) =>
-        `https://${origin.path}${name}${origin.versionMarker ?? "@"}${
-          version ?? origin.defaultVersion ?? "latest"
-        }/${path}`
-    );
-    const [result, index] = await raceWhich(urls.map((url) => import(url)));
-    if (useCache === "localhost") {
-      // cache the url in local storage
-      const localCache = localStorage.getItem(cacheKey);
-      const localCacheParsed = localCache ? JSON.parse(localCache) : {};
-      localCacheParsed[cacheName] = mainURL;
-      localStorage.setItem(cacheKey, JSON.stringify(localCacheParsed));
-    }
-    return [result, urls[index]];
-  };
-};
+const { MPort, MPortURL, mport } = createV1({
+  importer: (url) => import(url),
+  jsonImporter: async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`mport: ${url} responded ${res.status}`);
+    return { default: await res.json() };
+  },
+});
 
-// Like MPort, but returns the raw import result without the URL
-const MPort = (...inputs) => {
-  const mport = MPortURL(...inputs);
-  return async (...args) => {
-    const [result] = await mport(...args);
-    return result;
-  };
-};
-
-const mport = MPort();
+export * from "./core.mjs";
 export { MPort, MPortURL, mport };
 export default mport;
