@@ -191,23 +191,23 @@ test("router.import() fails over to another mirror at runtime", async () => {
   const mod = await router.import("react@19.2.0", { onEvent: (e) => events.push(`${e.type}${e.phase ? `/${e.phase}` : ""}:${e.provider}`) });
   assert.equal(mod.default, "https://unpkg.com/react@19.2.0/index.js");
   assert.equal(imported.length, 2);
-  assert.deepEqual(events, ["probe:jsdelivr", "ok:jsdelivr", "fail/import:jsdelivr", "skip:jsdelivr", "probe:unpkg", "ok:unpkg"]);
+  assert.deepEqual(events, ["selected:jsdelivr", "fail/import:jsdelivr", "skip:jsdelivr", "selected:unpkg"]);
 });
 
 test("onEvent receives the same events as trace", async () => {
   const events = [];
   const router = createRouter({ "*": esmSh() }, { probe: "none", fetch: fakeFetch(registryFixtures), onEvent: (e) => events.push(e.type) });
   await router.resolve("react@19.2.0");
-  assert.deepEqual(events, ["probe", "ok"]);
+  assert.deepEqual(events, ["selected"], "probe: \"none\" selects without claiming a probe succeeded");
 });
 
 test("registry lookups appear in the trace", async () => {
   const router = createRouter({ "*": esmSh() }, { probe: "none", fetch: fakeFetch(registryFixtures) });
   const r = await router.resolve("react@^19");
-  assert.deepEqual(r.trace.map((e) => `${e.type}:${e.provider}`), ["lookup:npm registry", "resolved:npm registry", "probe:esm.sh", "ok:esm.sh"]);
+  assert.deepEqual(r.trace.map((e) => `${e.type}:${e.provider}`), ["lookup:npm registry", "resolved:npm registry", "selected:esm.sh"]);
   assert.equal(r.trace[1].version, "19.2.0");
   const exact = await router.resolve("react@19.2.0");
-  assert.equal(exact.trace[0].type, "probe", "exact versions skip the lookup");
+  assert.equal(exact.trace[0].type, "selected", "exact versions skip the lookup");
 });
 
 test("an unknown package is one ResolutionError, not a failure per provider", async () => {
@@ -278,4 +278,44 @@ test("fallback reports the abort reason, not a skipped node's error", async () =
   };
   const router = createRouter({ "*": fallback(node, esmSh()) }, { probe: "none", fetch: fakeFetch(registryFixtures) });
   await assert.rejects(router.resolve("react@19.2.0", { signal: ac.signal }), /user cancelled/);
+});
+
+test("raw CDNs skip CommonJS entries; ESM-transforming CDNs still serve them", async () => {
+  const fetch = fakeFetch(registryFixtures);
+  const router = createRouter({ "*": [jsDelivr(), unpkg(), esmSh()] }, { probe: "none", fetch });
+  const r = await router.resolve("cjs-only@1");
+  assert.equal(r.provider, "esm.sh");
+  assert.deepEqual(r.trace.filter((e) => e.type === "skip").map((e) => e.provider), ["jsdelivr", "unpkg"]);
+  assert.match(r.trace.find((e) => e.type === "skip").reason, /CommonJS/);
+  const lenient = createRouter({ "*": jsDelivr() }, { probe: "none", fetch, allowCommonJS: true });
+  assert.equal((await lenient.resolve("cjs-only@1")).url, "https://cdn.jsdelivr.net/npm/cjs-only@1.0.0/index.js");
+});
+
+test("probe \"none\" records no health data", async () => {
+  const router = createRouter({ "*": esmSh() }, { probe: "none", fetch: fakeFetch(registryFixtures) });
+  await router.resolve("react@19.2.0");
+  assert.deepEqual(router.health.snapshot(), {});
+});
+
+test("an import probe that finishes after the race is decided is traced as lost, not ok", async () => {
+  const importer = (url) => new Promise((res) => setTimeout(() => res({ url }), url.includes("unpkg") ? 5 : 40));
+  const router = createRouter({ "*": race(jsDelivr(), unpkg()) }, { probe: "import", importer, fetch: fakeFetch(registryFixtures) });
+  const r = await router.resolve("react@19.2.0");
+  assert.equal(r.provider, "unpkg");
+  await new Promise((res) => setTimeout(res, 60));
+  const loser = r.trace.filter((e) => e.provider === "jsdelivr").at(-1);
+  assert.equal(loser.type, "aborted");
+  assert.equal(loser.reason, "lost the race");
+});
+
+test("entryInfo tells ESM from CommonJS", async () => {
+  const { entryInfo } = await import("../src/registry.mjs");
+  assert.deepEqual(entryInfo({ main: "index.js" }), { file: "index.js", esm: false });
+  assert.deepEqual(entryInfo({ type: "module", main: "index.js" }), { file: "index.js", esm: true });
+  assert.deepEqual(entryInfo({ main: "index.js", module: "dist/x.module.js" }), { file: "dist/x.module.js", esm: true });
+  assert.deepEqual(entryInfo({ exports: { ".": { browser: "./dist/p.module.js", require: "./dist/p.js" } } }), { file: "dist/p.module.js", esm: true });
+  assert.deepEqual(entryInfo({ exports: { ".": { browser: { import: "./b.js", require: "./b.cjs" } } } }), { file: "b.js", esm: true });
+  assert.deepEqual(entryInfo({ exports: { ".": { default: "./index.js" } } }), { file: "index.js", esm: false });
+  assert.deepEqual(entryInfo({ exports: "./x.cjs", type: "module" }), { file: "x.cjs", esm: false });
+  assert.deepEqual(entryInfo({ exports: { "./hooks": { import: "./hooks/h.js" } } }, "hooks"), { file: "hooks/h.js", esm: true });
 });

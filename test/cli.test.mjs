@@ -28,5 +28,5 @@ test("mport build writes an import map and lockfile from a config; resolve print
   await main(["resolve", "react@19.2.0", "--trace"], { cwd: dir, log: (s) => printed.push(s) });
   const r = JSON.parse(printed[0]);
   assert.equal(r.url, "https://esm.sh/react@19.2.0");
-  assert.deepEqual(r.trace.map((e) => e.type), ["probe", "ok"]);
+  assert.deepEqual(r.trace.map((e) => e.type), ["selected"]);
 });

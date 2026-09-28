@@ -48,14 +48,24 @@ export async function select(p, req, ctx) {
   if (health?.isOpen(p.name)) throw skip(ctx, p, "circuit open");
 
   const artifact = await ctx.artifact(p, registry);
+  if (artifact.esm === false && !ctx.allowCommonJS) {
+    throw skip(ctx, p, `${artifact.entry} is CommonJS; raw file CDNs can't serve it to browsers (use an ESM-transforming CDN, or allowCommonJS)`);
+  }
   const url = p.url(artifact);
+  if (ctx.probeMode === "none") {
+    // Nothing was checked, so record a selection, not a success (and no health data).
+    note(ctx, { type: "selected", provider: p.name, url });
+    return { url, provider: p.name, build: p.build, artifact };
+  }
   const t0 = ctx.now();
   note(ctx, { type: "probe", provider: p.name, url });
   try {
     const { module } = (await ctx.probe(url, { provider: p, signal: ctx.signal })) ?? {};
     const ms = ctx.now() - t0;
     health?.success(p.name, ms);
-    note(ctx, { type: "ok", provider: p.name, url, ms });
+    // A probe that can't be cancelled (import) may finish after the race was decided.
+    if (ctx.signal?.aborted) note(ctx, { type: "aborted", provider: p.name, url, ms, reason: "lost the race" });
+    else note(ctx, { type: "ok", provider: p.name, url, ms });
     return { url, provider: p.name, build: p.build, artifact, module };
   } catch (e) {
     const aborted = isAbort(e, ctx.signal);

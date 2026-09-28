@@ -59,7 +59,7 @@ export interface Artifact {
 }
 
 export interface TraceEvent {
-  type: "lookup" | "resolved" | "probe" | "ok" | "fail" | "skip" | "aborted";
+  type: "lookup" | "resolved" | "probe" | "ok" | "selected" | "fail" | "skip" | "aborted";
   /** for "resolved": the exact version the registry lookup chose */
   version?: string;
   /** "import": router.import() failed to load a resolved URL; "integrity": verified() rejected it */
@@ -139,6 +139,8 @@ export interface RouterOptions {
   registries?: { npm?: string; jsr?: string };
   onEvent?: (event: TraceEvent) => void;
   now?: () => number;
+  /** let raw file CDNs serve CommonJS entries (default false: they're skipped) */
+  allowCommonJS?: boolean;
   name?: string;
 }
 
@@ -200,6 +202,7 @@ export class IntegrityError extends Error {}
 export class ResolutionError extends Error {}
 
 export function entryOf(pkg: Record<string, unknown>, subpath?: string): string;
+export function entryInfo(pkg: Record<string, unknown>, subpath?: string): { file: string; esm: boolean };
 export function resolveExports(exportsField: unknown, subpath?: string): string | undefined;
 export function createRegistry(o?: { fetch?: typeof fetch; npm?: string; jsr?: string }): { version(parsed: object): Promise<string | undefined>; entry(name: string, version: string, subpath?: string): Promise<string> };
 export function parseSpecifier(input: string | MPortOptions): { registry: Registry; explicit: boolean; name: string; range?: string; path: string; prefix: boolean } | null;

@@ -65,6 +65,7 @@ const defaultProbe = (fetch) => async (url, { signal }) => {
  * @param {string} [options.target="browser"] default target for prefer()
  * @param {Function} [options.fetch] fetch implementation (tests, proxies)
  * @param {Function} [options.importer] dynamic import implementation for probe "import"
+ * @param {boolean} [options.allowCommonJS=false] let raw file CDNs serve packages whose entry is CommonJS (browsers can't import those)
  */
 export function createRouter(routes, options = {}) {
   const {
@@ -80,6 +81,7 @@ export function createRouter(routes, options = {}) {
     now = () => Date.now(),
     name = "mport",
     onEvent,
+    allowCommonJS = false,
   } = options;
 
   const table = (Array.isArray(routes) ? routes : Object.entries(routes).map(([match, use]) => ({ match, use })))
@@ -140,8 +142,8 @@ export function createRouter(routes, options = {}) {
     const entries = new Map();
     const getEntry = async (reg = req.registry) => {
       if (!entries.has(reg)) {
-        entries.set(reg, pinned?.entry ? Promise.resolve(pinned.entry)
-          : reg === "npm" ? registry.entry(req.name, await getVersion(reg), req.path)
+        entries.set(reg, pinned?.entry ? Promise.resolve({ file: pinned.entry, esm: true })
+          : reg === "npm" ? registry.entryInfo(req.name, await getVersion(reg), req.path)
           : Promise.resolve(undefined));
       }
       return entries.get(reg);
@@ -161,12 +163,14 @@ export function createRouter(routes, options = {}) {
       fetch,
       now,
       probe: probeFn,
+      probeMode: typeof probe === "function" ? "custom" : probe,
+      allowCommonJS,
       trace: [],
       onEvent: opts.onEvent ?? onEvent,
       async artifact(p, reg = req.registry) {
         const v = p.needsVersion ? await getVersion(reg) : req.range;
-        const e = p.needsEntry && needsFile ? await getEntry(reg) : undefined;
-        return { registry: reg, name: req.name, version: v, path: req.path, entry: e };
+        const info = p.needsEntry && needsFile ? await getEntry(reg) : undefined;
+        return { registry: reg, name: req.name, version: v, path: req.path, entry: info?.file, esm: info?.esm };
       },
       async cacheKey() {
         const v = resolveVersions || pinned ? await getVersion() : req.range;

@@ -145,6 +145,8 @@ Patterns match the specifier without its version, e.g. `npm:react/jsx-runtime`. 
 |---|---|---|---|
 | `esmSh()` | `esm.sh` | npm, jsr, github | transforms to browser ESM |
 | `jsDelivr()` | `npm` | npm, github | raw files. The entry comes from `exports` → `module` → `main`, and sub-paths such as `preact/hooks` are mapped through `exports` |
+
+**CommonJS and raw CDNs.** Raw file CDNs (`jsDelivr()`, `unpkg()`, `jspm()`, `local()`) serve files as published, so a package whose entry is CommonJS, such as React's `index.js`, can't be imported from them in a browser. mport skips those providers for such packages (`skip` with a reason) so the route falls through to an ESM-transforming CDN like esm.sh. ESM is detected from `.mjs`, an `import`/`module` export condition, the `module` field, `"type": "module"`, or ESM-by-convention names (`*.module.js`, `*.esm.js`, `…/esm/…`). Pass `createRouter(routes, { allowCommonJS: true })` to turn the check off.
 | `jsDelivr({ esm: true })` | `jsdelivr-esm` | npm | jsDelivr's `/+esm` bundles |
 | `unpkg()` | `npm` | npm | raw files |
 | `jspm()` | `jspm` | npm | `ga.jspm.io` builds |
@@ -270,7 +272,7 @@ r.trace;
 //   { type: "ok",    provider: "jsdelivr", ms: 41 } ]
 ```
 
-Event types are `lookup` / `resolved` (a registry lookup that turned a range into a version), `probe`, `ok`, `fail`, `skip` (with a `reason`) and `aborted` (a race loser). Failed resolutions attach the same list as `error.trace`.
+Event types are `lookup` / `resolved` (a registry lookup that turned a range into a version), `probe`, `ok`, `fail`, `skip` (with a `reason`), `aborted` (a race loser; an `import` probe that finishes after the race was decided is reported as `aborted` with `reason: "lost the race"`), and `selected` (with `probe: "none"`: the provider was chosen without checking the URL, so no health data is recorded either). Failed resolutions attach the same list as `error.trace`.
 
 Resolutions that can't happen at all, such as an unknown package or an impossible range, reject with a single `ResolutionError`. No CDN is blamed or put in its circuit.
 
@@ -339,7 +341,7 @@ npm run demo:html   # then open http://localhost:8712/examples/
 | `examples/playground.html` | Build a router, simulate CDN outages and latency per provider, and watch each lookup on a timeline (registry lookups, probes, skips, aborted race losers). Covers every strategy, a live health and circuit table, lockfile pinning across runs, and the import map, lockfile and equivalent config, which you can copy or download |
 | `examples/router.html` | A guided tour: the v1 race with debug info, a fallback past a dead mirror, routing by package name compiled to an import map, and runtime failover with `router.import()` |
 | `examples/startup.html` | `startup()` injects an import map, then a Preact + htm app loads through plain `import "preact"` |
-| `examples/demo.html` | The unchanged 1.x demo (output goes to the console) |
+| `examples/demo.html`, `examples/demo.firefox.html` | The unchanged 1.x API, through the standard and Firefox entry points, with results on the page |
 
 These pages talk to the real CDNs and registries.
 
