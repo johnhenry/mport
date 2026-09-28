@@ -44,13 +44,47 @@
     .tabs button[aria-selected=true] { border-bottom-color: var(--accent); color: var(--accent); }
     .error { color: var(--fail); white-space: pre-wrap; font: 13px ui-monospace, monospace; }
     .hint { color: var(--muted); font-size: 13px; }
+    .scenarios { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: .6rem; margin: 0 0 1rem; }
+    .scenarios button { text-align: left; padding: .6rem .75rem; line-height: 1.35; display: grid; gap: .2rem; }
+    .scenarios button b { font-size: 14px; }
+    .scenarios button span { color: var(--muted); font-size: 12.5px; }
+    .scenarios button[aria-pressed=true] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+    .scenario { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1rem; margin: 0 0 1.5rem; background: color-mix(in srgb, var(--accent) 5%, transparent); }
+    .scenario h2 { margin: 0 0 .35rem; }
+    .scenario .cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 1rem; }
+    @media (max-width: 52rem) { .scenario .cols { grid-template-columns: minmax(0, 1fr); } }
+    .scenario h3 { font-size: 13px; margin: .5rem 0 .25rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    .scenario ul, .scenario ol { margin: 0; padding-left: 1.2rem; }
+    .scenario li { margin: .2rem 0; }
+    .checks { list-style: none; padding: 0 !important; }
+    .checks li { display: flex; gap: .5rem; align-items: baseline; }
+    .checks .mark { flex: none; font: 600 12px ui-monospace, monospace; padding: 0 .35rem; border-radius: 4px; }
+    .checks .mark.pass { color: var(--ok); } .checks .mark.fail { color: var(--fail); } .checks .mark.wait { color: var(--muted); }
+    .verdict { font-size: 13.5px; margin: .1rem 0 .4rem; padding: .35rem .5rem; border-radius: 6px; background: color-mix(in srgb, var(--fg) 5%, transparent); }
+    .verdict.good { border-left: 3px solid var(--ok); } .verdict.bad { border-left: 3px solid var(--fail); }
+    .legend { display: flex; flex-wrap: wrap; gap: .25rem .9rem; font-size: 12px; color: var(--muted); margin: 0 0 .5rem; }
+    .legend i { display: inline-block; width: .9rem; height: .6rem; border-radius: 2px; vertical-align: middle; margin-right: .3rem; }
+    h2.section { margin: 1.5rem 0 .25rem; font-size: 1.1rem; }
   </style>
 </head>
 <body>
 <header class="top"><nav><a href="./index.html">mport examples</a> / <b>playground</b></nav></header>
 <main>
   <h1>Routing playground</h1>
-  <p class="lead">Build a router, break some CDNs, and watch the router work around them. The registry lookups and probes are real network requests. Outages and extra latency are simulated with a <code>fetch</code> wrapper passed to <code>createRouter({ fetch })</code>.</p>
+  <p class="lead">mport decides <em>which exact version</em> of a package you get once, then lets <em>which CDN serves it</em> change when CDNs are slow, down or wrong. Pick a scenario: each one sets up the controls below, breaks something, and tells you what to look for. Registry lookups and CDN requests are real; outages, latency and tampered bytes are simulated with a <code>fetch</code> wrapper passed to <code>createRouter({ fetch })</code>.</p>
+
+  <div class="scenarios" id="scenario-buttons"></div>
+  <section class="scenario" id="scenario" hidden></section>
+
+  <h2 class="section">Build your own</h2>
+  <p class="hint">Every scenario is just these settings. Change anything and press Resolve.</p>
+  <div class="legend">
+    <span><i style="background:var(--accent)"></i>registry lookup (range → exact version)</span>
+    <span><i style="background:var(--ok)"></i>CDN answered</span>
+    <span><i style="background:var(--fail)"></i>CDN failed</span>
+    <span><i style="background:var(--skip);opacity:.6"></i>cancelled / lost the race</span>
+    <span><i style="background:repeating-linear-gradient(45deg,var(--skip) 0 3px,transparent 3px 6px)"></i>skipped without asking (reason shown)</span>
+  </div>
 
   <div class="grid">
     <form id="config" autocomplete="off">
@@ -58,9 +92,7 @@
         <legend>Specifiers</legend>
         <textarea id="specs" spellcheck="false">react@^19
 preact@^10/hooks
-lit/
-jsr:@std/path@^1
-@scope-that-does-not-exist/nope</textarea>
+lit@^3</textarea>
         <p class="hint">One per line. A trailing <code>/</code> makes a prefix mapping. <code>react</code> ships only CommonJS, so raw file CDNs (jsDelivr, unpkg, jspm) skip it and only esm.sh can serve it: take esm.sh down to see that.</p>
       </fieldset>
 
@@ -133,7 +165,7 @@ jsr:@std/path@^1
     { id: "unpkg", label: "unpkg", make: () => unpkg(), host: "unpkg.com", build: "npm", weight: 1 },
     { id: "jspm", label: "jspm", make: () => jspm(), host: "ga.jspm.io", build: "jspm", weight: 1 },
   ];
-  const state = Object.fromEntries(PROVIDERS.map((p) => [p.id, { on: p.id !== "jspm", down: false, latency: 0 }]));
+  const state = Object.fromEntries(PROVIDERS.map((p) => [p.id, { on: p.id !== "jspm", down: false, latency: 0, tamper: false }]));
 
   const $ = (s) => document.querySelector(s);
   const h = (tag, attrs = {}, ...kids) => {
@@ -158,6 +190,7 @@ jsr:@std/path@^1
         h("span", {}),
         h("div", { className: "controls" },
           h("label", {}, h("input", { type: "checkbox", checked: s.down, onchange: (e) => { s.down = e.target.checked; renderProviders(); } }), " simulate outage"),
+          h("label", {}, h("input", { type: "checkbox", checked: s.tamper, onchange: (e) => { s.tamper = e.target.checked; } }), " tamper with bytes"),
           h("label", {}, "+latency ", h("input", { type: "range", min: 0, max: 1500, step: 50, value: s.latency,
             oninput: (e) => { s.latency = +e.target.value; e.target.nextElementSibling.textContent = `${s.latency} ms`; } }),
             h("output", {}, `${s.latency} ms`)),
@@ -178,6 +211,11 @@ jsr:@std/path@^1
       const s = state[p.id];
       if (s.latency) await sleep(s.latency, init.signal);
       if (s.down) throw new TypeError(`simulated outage: ${host}`);
+      if (s.tamper && (init.method ?? "GET") === "GET") {
+        // A compromised mirror: same URL, different bytes.
+        const res = await fetch(url, init);
+        return new Response(`${await res.text()}\n/* tampered by a simulated compromised mirror */`, { status: res.status, headers: res.headers });
+      }
     }
     return fetch(url, init);
   };
@@ -258,20 +296,58 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
           h("div", { className: "who", title: who }, who),
           h("div", { className: "track" },
             l.bars.length === 0 && l.skips.length ? h("div", { className: "bar skip", title: l.skips.join("; ") }) : null,
-            l.bars.map((b) => h("div", { className: `bar ${b.type}`, title: b.label,
-              style: { left: `${(b.start / max) * 80}%`, width: `${Math.max(0.5, ((b.end - b.start) / max) * 80)}%` } }, h("span", {}, b.label))),
+            // only a lane's last bar gets a text label (earlier ones keep theirs in a tooltip), so labels never overlap
+            l.bars.map((b, i) => h("div", { className: `bar ${b.type}`, title: l.bars.map((x) => x.label).join(" → "),
+              style: { left: `${(b.start / max) * 80}%`, width: `${Math.max(0.5, ((b.end - b.start) / max) * 80)}%` } },
+              i === l.bars.length - 1 ? h("span", {}, l.bars.length > 1 ? l.bars.map((x) => x.label.split(" ")[0]).join(" → ") + (b.label.includes("ms") ? ` ${b.label.split(" ").at(-1)}` : "") : b.label) : null)),
             l.skips.length && l.bars.length === 0 ? h("span", { className: "skipreason", title: l.skips.join("\n") }, `skipped: ${l.skips[0]}`) : null,
           )))),
       h("div", { className: "axis" }, h("span", {}, "0 ms"), h("span", {}, `${Math.round(max)} ms`)));
   }
 
+  // One plain-English sentence per result, derived from the trace.
+  const short = (text = "") => text.replace(/^[^:]+: /, "").replace(/ \(use an ESM.*$/, "").replace(/^mport: /, "");
+  function verdict(spec, r, err) {
+    const trace = r?.trace ?? err?.trace ?? [];
+    const by = (type) => [...new Set(trace.filter((e) => e.type === type).map((e) => e.provider))].filter((p) => !/registry$/.test(p));
+    const skipped = trace.filter((e) => e.type === "skip");
+    const tampered = [...new Set(trace.filter((e) => e.type === "fail" && e.phase === "integrity").map((e) => e.provider))];
+    const failed = by("fail").filter((p) => !tampered.includes(p) || trace.some((e) => e.type === "fail" && e.provider === p && e.phase !== "integrity"));
+    const lost = trace.filter((e) => e.type === "aborted").map((e) => e.provider);
+    const why = (p) => short(skipped.find((e) => e.provider === p)?.reason);
+    const parts = [];
+    if (err) {
+      if (err.name === "ResolutionError") {
+        const cause = /may not exist|not found/.test(err.message) ? "the package may not exist, or the registry is unreachable" : /satisfies/.test(err.message) ? "no published version matches that range" : "the registry lookup failed";
+        return { good: false, text: `✗ Couldn't turn "${spec}" into an exact version: ${cause}. No CDN was asked.` };
+      }
+      const cjs = skipped.filter((e) => /CommonJS/.test(e.reason ?? ""));
+      if (cjs.length && cjs.length + failed.length >= (err.errors?.length ?? 0)) {
+        return { good: false, text: `✗ No CDN left can serve it. ${failed.length ? `${failed.join(", ")} failed; ` : ""}${cjs.map((e) => e.provider).join(" and ")} only serve raw files, and this package ships CommonJS, which browsers can't import.` };
+      }
+      return { good: false, text: `✗ Every CDN was ruled out: ${[...failed.map((p) => `${p} failed`), ...skipped.map((e) => `${e.provider} skipped (${short(e.reason)})`)].join("; ")}.` };
+    }
+    if (!r) return { good: false, text: "No route matched, so mport leaves this specifier to the browser." };
+    const pinned = !trace.some((e) => e.type === "lookup") && r.range && !/^\d+\.\d+\.\d+/.test(r.range);
+    if (pinned) parts.push(`version ${r.version} came from the lockfile, with no registry lookup`);
+    for (const e of skipped) parts.push(`${e.provider} skipped (${why(e.provider)})`);
+    if (failed.length) parts.push(`${failed.join(", ")} failed`);
+    if (tampered.length) parts.push(`${tampered.join(", ")} rejected: its bytes didn't match the lockfile's hash`);
+    if (lost.length) parts.push(`beat ${[...new Set(lost)].join(", ")} in a race`);
+    if (r.integrity) parts.push(`bytes verified (${r.integrity.slice(0, 14)}…)`);
+    const how = trace.some((e) => e.type === "selected") ? "picked (not checked, probe: none)" : "served";
+    return { good: true, text: `✓ ${how} by ${r.provider}${parts.length ? ": " + parts.join("; ") : ""}.` };
+  }
+
   function card(spec, r, err, t0) {
     const trace = r?.trace ?? err?.trace ?? [];
+    const v = verdict(spec, r, err);
     const meta = r
       ? `${r.version ? `v${r.version} · ` : ""}${r.provider} (${r.build})${r.cached ? " · cached" : ""}${r.integrity ? ` · ${r.integrity.slice(0, 22)}…` : ""}`
       : null;
     return h("div", { className: "card" },
       h("h3", {}, spec),
+      h("div", { className: `verdict ${v.good ? "good" : "bad"}` }, v.text),
       r ? h("div", { className: "meta" }, meta, h("br"), h("a", { href: r.base ?? r.url, target: "_blank", rel: "noopener" }, r.base ?? r.url)) : null,
       r === null ? h("div", { className: "meta" }, "no route matched — left to the browser") : null,
       err ? h("div", { className: "error" }, `${err.name}: ${err.message}${err.errors ? "\n" + err.errors.map((e) => `  · ${e.message}`).join("\n") : ""}`) : null,
@@ -317,6 +393,8 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
     };
     paint();
     await Promise.all(list.map((s) => router.resolve(s).then((r) => { results.get(s).r = r; }, (err) => { results.get(s).err = err; }).finally(paint)));
+    // race losers whose requests can't be cancelled finish later: repaint once they settle
+    setTimeout(paint, 1500);
     const ok = [...results.values()].map((x) => x.r).filter(Boolean);
     const { compileImportMap } = await import("../src/importmap.mjs");
     outputs = {
@@ -325,9 +403,193 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
       code: describe(),
     };
     setOutput();
+    return results;
   }
 
-  $("#config").addEventListener("submit", (e) => { e.preventDefault(); run({ fresh: true }); });
+  // ---- scenarios --------------------------------------------------------------
+  const ALL_UP = { esmSh: {}, jsDelivr: {}, unpkg: {}, jspm: { on: false } };
+  function apply(settings) {
+    const s = { specs: ["react@^19", "preact@^10/hooks", "lit@^3"], strategy: "fallback", target: "browser", probe: "head", jsrRoute: true, cb: [2, 15], pin: true, providers: ALL_UP, ...settings };
+    $("#specs").value = s.specs.join("\n");
+    $("#strategy").value = s.strategy;
+    $("#target").value = s.target;
+    $("#probe").value = s.probe;
+    $("#jsrRoute").checked = s.jsrRoute;
+    [$("#cbFailures").value, $("#cbReset").value] = s.cb;
+    $("#pin").checked = s.pin;
+    for (const p of PROVIDERS) Object.assign(state[p.id], { on: true, down: false, latency: 0, tamper: false }, s.providers[p.id] ?? { on: false });
+    renderProviders();
+  }
+  const served = (res, spec) => res?.get(spec)?.r?.provider;
+  const traceOf = (res, spec) => res?.get(spec)?.r?.trace ?? res?.get(spec)?.err?.trace ?? [];
+  const has = (res, spec, pred) => traceOf(res, spec).some(pred);
+
+  const SCENARIOS = [
+    {
+      id: "normal", title: "Everything's up", blurb: "The baseline: what a normal resolution looks like.",
+      what: "All CDNs are healthy. The router tries them in order (fallback): esm.sh, then jsDelivr, then unpkg.",
+      notice: [
+        "Each package starts with a registry lookup (blue): the range, e.g. <code>^19</code>, becomes an exact version.",
+        "Then the first CDN in order is asked (green) and answers, so nothing else is tried.",
+        "The import map below maps each bare name to the chosen URL. That's all the browser needs.",
+      ],
+      async steps(ctx) { apply({}); ctx.runs.push(await ctx.run("Resolve with every CDN up")); },
+      checks: ({ runs: [a] }) => [
+        ["Every package was served by esm.sh, the first CDN in the list", ["react@^19", "preact@^10/hooks", "lit@^3"].every((s) => served(a, s) === "esm.sh")],
+        ["Each package's version came from a registry lookup", ["react@^19", "lit@^3"].every((s) => has(a, s, (e) => e.type === "resolved"))],
+      ],
+    },
+    {
+      id: "outage", title: "A CDN goes down", blurb: "esm.sh is unreachable. Who takes over?",
+      what: "esm.sh is down, so the router falls through to the next CDN. But jsDelivr and unpkg serve package files exactly as published, while esm.sh converts them to browser-ready ES modules.",
+      notice: [
+        "<b>preact/hooks</b> and <b>lit</b> are fine: they publish ES modules, so jsDelivr can serve them as-is.",
+        "<b>react</b> fails: it publishes only CommonJS, which browsers can't import. jsDelivr and unpkg are skipped (hatched) instead of returning a URL that would break at import time.",
+        "The health table counts esm.sh's failures; keep resolving and its circuit opens (see the circuit breaker scenario).",
+      ],
+      async steps(ctx) { apply({ providers: { ...ALL_UP, esmSh: { down: true } } }); ctx.runs.push(await ctx.run("Resolve with esm.sh down")); },
+      checks: ({ runs: [a] }) => [
+        ["preact/hooks was served by jsDelivr after esm.sh failed", served(a, "preact@^10/hooks") === "jsdelivr" && has(a, "preact@^10/hooks", (e) => e.type === "fail" && e.provider === "esm.sh")],
+        ["react failed, and the raw-file CDNs were skipped because it's CommonJS", !served(a, "react@^19") && has(a, "react@^19", (e) => e.type === "skip" && /CommonJS/.test(e.reason))],
+      ],
+    },
+    {
+      id: "race", title: "Race: fastest wins", blurb: "Ask every CDN at once; use whichever answers first.",
+      what: "The strategy is <code>race()</code>: all CDNs are asked at the same time. jsDelivr gets +900 ms of simulated latency and unpkg +500 ms, so esm.sh should win.",
+      notice: [
+        "All three CDN bars start at the same moment.",
+        "The first to answer wins; the others are cancelled (faded), so a slow CDN costs nothing.",
+        "A single CDN failing fast doesn't lose the race: the first <em>success</em> wins.",
+      ],
+      async steps(ctx) {
+        apply({ strategy: "race", specs: ["preact@^10/hooks", "lit@^3"], providers: { ...ALL_UP, jsDelivr: { latency: 900 }, unpkg: { latency: 500 } } });
+        ctx.runs.push(await ctx.run("Race with jsDelivr and unpkg slowed down"));
+      },
+      checks: ({ runs: [a] }) => [
+        ["esm.sh won both races", served(a, "preact@^10/hooks") === "esm.sh" && served(a, "lit@^3") === "esm.sh"],
+        ["The slower CDNs were cancelled", has(a, "lit@^3", (e) => e.type === "aborted")],
+      ],
+    },
+    {
+      id: "breaker", title: "Circuit breaker", blurb: "Stop asking a CDN that keeps failing.",
+      what: "esm.sh is down. The circuit breaker opens after 2 failures in a row and stays open for 10 seconds. The scenario resolves three times with the same router health.",
+      notice: [
+        "Runs 1 and 2: esm.sh is asked, fails, and the router moves on to jsDelivr.",
+        "Run 3: esm.sh is skipped with \"circuit open\": no request is sent, so users don't wait for a timeout.",
+        "Watch the health table: the circuit shows open with a countdown. After it expires, esm.sh gets one more chance.",
+      ],
+      async steps(ctx) {
+        apply({ specs: ["lit@^3"], cb: [2, 10], pin: false, providers: { ...ALL_UP, esmSh: { down: true } } });
+        for (let i = 1; i <= 3; i++) ctx.runs.push(await ctx.run(`Run ${i}`, { fresh: i === 1 }));
+      },
+      checks: ({ runs }) => [
+        ["Runs 1 and 2 asked esm.sh and it failed", runs.slice(0, 2).every((r) => has(r, "lit@^3", (e) => e.type === "fail" && e.provider === "esm.sh"))],
+        ["Run 3 skipped esm.sh without asking (circuit open)", has(runs[2], "lit@^3", (e) => e.type === "skip" && e.provider === "esm.sh" && /circuit open/.test(e.reason))],
+        ["lit was still served every time (by jsDelivr)", runs.every((r) => served(r, "lit@^3") === "jsdelivr")],
+      ],
+    },
+    {
+      id: "pinning", title: "Same version, different mirror", blurb: "A lockfile keeps the exact version and build.",
+      what: "Run 1 resolves with esm.sh switched off, so jsDelivr serves the raw npm files and the lockfile records version + build. Then jsDelivr goes down, esm.sh comes back, and run 2 reuses that lockfile.",
+      notice: [
+        "Run 2 does no registry lookup: the version comes from the lockfile.",
+        "esm.sh is skipped even though it's up: it serves a <em>different build</em> (converted code), and the lock says \"npm\" (raw files).",
+        "jsDelivr fails, so unpkg, which serves the same raw files, takes over. Same version, same bytes, different mirror.",
+      ],
+      async steps(ctx) {
+        apply({ specs: ["preact@^10/hooks", "lit@^3"], providers: { ...ALL_UP, esmSh: { on: false } } });
+        ctx.runs.push(await ctx.run("Run 1: jsDelivr serves, lockfile recorded"));
+        Object.assign(state.esmSh, { on: true }); Object.assign(state.jsDelivr, { down: true }); renderProviders();
+        ctx.runs.push(await ctx.run("Run 2: jsDelivr down, esm.sh back, same lockfile", { fresh: false }));
+      },
+      checks: ({ runs: [a, b] }) => [
+        ["Run 2 skipped the registry lookup (version from the lockfile)", !has(b, "lit@^3", (e) => e.type === "lookup")],
+        ["esm.sh was skipped as a different build", has(b, "lit@^3", (e) => e.type === "skip" && e.provider === "esm.sh" && /locked to "npm"/.test(e.reason))],
+        ["unpkg served the same version jsDelivr served in run 1", served(b, "lit@^3") === "unpkg" && b.get("lit@^3").r.version === a.get("lit@^3").r.version],
+      ],
+    },
+    {
+      id: "prefer", title: "Pick by capability", blurb: "Browser-ready code or raw files, per request.",
+      what: "<code>prefer({ browser: esmSh(), raw: fallback(jsDelivr(), unpkg()) })</code> chooses a CDN by what the caller needs. The scenario resolves once with target \"browser\" and once with target \"raw\".",
+      notice: [
+        "Target \"browser\" goes to esm.sh (converted, ready to import).",
+        "Target \"raw\" goes to jsDelivr (the files exactly as published, e.g. for a bundler or a lockfile audit).",
+        "Same package, same version, different artifact. See the steps list for both results; the cards show the last run.",
+      ],
+      async steps(ctx) {
+        apply({ strategy: "prefer", specs: ["preact@^10/hooks", "lit@^3"] });
+        ctx.runs.push(await ctx.run("target: browser"));
+        $("#target").value = "raw";
+        ctx.runs.push(await ctx.run("target: raw"));
+      },
+      checks: ({ runs: [a, b] }) => [
+        ["target \"browser\" → esm.sh", served(a, "lit@^3") === "esm.sh"],
+        ["target \"raw\" → jsDelivr, same version", served(b, "lit@^3") === "jsdelivr" && a.get("lit@^3").r.version === b.get("lit@^3").r.version],
+      ],
+    },
+    {
+      id: "integrity", title: "Tampered mirror", blurb: "Reject a CDN that serves different bytes.",
+      what: "Run 1 records each file's SRI hash in the lockfile (esm.sh off; jsDelivr and unpkg race, each wrapped in <code>verified()</code>). Then jsDelivr starts serving tampered bytes, and is made the fastest.",
+      notice: [
+        "Run 2: jsDelivr answers first, but its bytes don't match the hash in the lockfile, so it's rejected (red, \"integrity\").",
+        "unpkg serves the genuine file, which matches, so it's used.",
+        "The import map carries the hashes too (<code>integrity</code>), so browsers enforce them on their own.",
+      ],
+      async steps(ctx) {
+        apply({ strategy: "verified", specs: ["lit@^3"], providers: { ...ALL_UP, esmSh: { on: false } } });
+        ctx.runs.push(await ctx.run("Run 1: record hashes"));
+        Object.assign(state.jsDelivr, { tamper: true, latency: 0 }); Object.assign(state.unpkg, { latency: 400 }); renderProviders();
+        ctx.runs.push(await ctx.run("Run 2: jsDelivr tampered (and fastest)", { fresh: false }));
+      },
+      checks: ({ runs: [a, b] }) => [
+        ["Run 1 recorded an SRI hash", Boolean(a.get("lit@^3").r?.integrity)],
+        ["Run 2 rejected jsDelivr's tampered bytes", has(b, "lit@^3", (e) => e.type === "fail" && e.provider === "jsdelivr" && e.phase === "integrity")],
+        ["unpkg's genuine file was used, with the recorded hash", served(b, "lit@^3") === "unpkg" && b.get("lit@^3").r.integrity === a.get("lit@^3").r.integrity],
+      ],
+    },
+  ];
+
+  let active = null;
+  const renderScenarioButtons = () => $("#scenario-buttons").replaceChildren(...SCENARIOS.map((sc) =>
+    h("button", { type: "button", "aria-pressed": String(active === sc.id), onclick: () => playScenario(sc) }, h("b", {}, sc.title), h("span", {}, sc.blurb))));
+
+  async function playScenario(sc) {
+    active = sc.id;
+    renderScenarioButtons();
+    const box = $("#scenario");
+    box.hidden = false;
+    const steps = h("ol", {});
+    const checks = h("ul", { className: "checks" });
+    box.replaceChildren(
+      h("h2", {}, sc.title),
+      h("p", { innerHTML: sc.what }),
+      h("div", { className: "cols" },
+        h("div", {}, h("h3", {}, "What to notice"), h("ul", {}, sc.notice.map((n) => h("li", { innerHTML: n })))),
+        h("div", {}, h("h3", {}, "Steps"), steps, h("h3", {}, "Did it happen?"), checks)));
+    const ctx = {
+      runs: [],
+      async run(label, { fresh = true } = {}) {
+        const li = h("li", {}, `${label} …`);
+        steps.append(li);
+        const res = await run({ fresh });
+        await sleep(1600); // let cancelled race losers settle into the trace
+        const summary = [...res].map(([spec, { r }]) => `${spec} → ${r?.provider ?? "✗"}`).join(", ");
+        li.textContent = `${label}: ${summary}`;
+        return res;
+      },
+    };
+    checks.append(h("li", {}, h("span", { className: "mark wait" }, "…"), "running"));
+    try {
+      await sc.steps(ctx);
+      checks.replaceChildren(...sc.checks(ctx).map(([label, ok]) =>
+        h("li", {}, h("span", { className: `mark ${ok ? "pass" : "fail"}` }, ok ? "yes" : "no"), label)));
+    } catch (e) {
+      checks.replaceChildren(h("li", {}, h("span", { className: "mark fail" }, "error"), `${e.name}: ${e.message}`));
+    }
+  }
+  renderScenarioButtons();
+
+  $("#config").addEventListener("submit", (e) => { e.preventDefault(); active = null; renderScenarioButtons(); run({ fresh: true }); });
   $("#again").addEventListener("click", () => run({ fresh: false }));
   $("#reset").addEventListener("click", () => { router = makeRouter(); outputs = { map: "", lock: "", code: describe() }; setOutput(); renderHealth(router); $("#cards").replaceChildren(); });
   $("#copy").addEventListener("click", async (e) => {
@@ -341,7 +603,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
   setInterval(() => router && renderHealth(router), 1000);
-  run({ fresh: true });
+  playScenario(SCENARIOS[0]);
 </script>
 </body>
 </html>

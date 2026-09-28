@@ -340,7 +340,7 @@ npm run demo:html   # then open http://localhost:8712/examples/
 
 | Page | What it shows |
 |---|---|
-| `examples/playground.html` | Build a router, simulate CDN outages and latency per provider, and watch each lookup on a timeline (registry lookups, probes, skips, aborted race losers). Covers every strategy, a live health and circuit table, lockfile pinning across runs, and the import map, lockfile and equivalent config, which you can copy or download |
+| `examples/playground.html` | Guided scenarios: everything up, a CDN outage (and why React can't fall back to raw CDNs), a race, the circuit breaker, lockfile pinning to a different mirror, choosing by capability, and a tampered mirror rejected by `verified()`. Each explains what to notice, verifies it happened, and gives every result a plain-English verdict. The controls underneath build any other router. |
 | `examples/router.html` | A guided tour: the v1 race with debug info, a fallback past a dead mirror, routing by package name compiled to an import map, and runtime failover with `router.import()` |
 | `examples/startup.html` | `startup()` injects an import map, then a Preact + htm app loads through plain `import "preact"` |
 | `examples/demo.html`, `examples/demo.firefox.html` | The unchanged 1.x API, through the standard and Firefox entry points, with results on the page |
