@@ -1,4 +1,44 @@
 <!DOCTYPE html>
 <html lang="en">
-  <script type="module" src="./demo.mjs"></script>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mport 1.x demo</title>
+  <link rel="stylesheet" href="./shared.css">
+  <style>
+    main { max-width: 60rem; }
+    .call { border-top: 1px solid var(--line); padding: .75rem 0; }
+    .call h2 { font: 600 14px/1.4 ui-monospace, monospace; margin: 0 0 .25rem; }
+    .status { color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+<header class="top"><nav><a href="./index.html">mport examples</a> / <b>1.x demo</b></nav></header>
+<main>
+  <h1>The 1.x API</h1>
+  <p class="lead"><code>mport()</code>, <code>MPort()</code> and <code>MPortURL()</code> work exactly as in mport 1.x: each import races jsDelivr, JSPM and unpkg and uses the first that answers. <code>MPortURL</code> also returns the winning URL and, new in 2.0, debug info as a third element.</p>
+  <p class="status" id="status">running against the real CDNs…</p>
+  <div id="out"></div>
+</main>
+<script type="module">
+  import { runDemo } from "./demo.mjs";
+  const out = document.querySelector("#out");
+  const status = document.querySelector("#status");
+  const report = (label, value) => {
+    const section = document.createElement("section");
+    section.className = "call";
+    const h = document.createElement("h2");
+    h.textContent = label;
+    const pre = document.createElement("pre");
+    pre.textContent = value;
+    section.append(h, pre);
+    out.append(section);
+    console.log(label, value);
+  };
+  runDemo({ report }).then(
+    () => { status.textContent = "done — the same calls also log to the console"; status.className = "status ok"; },
+    (e) => { status.textContent = `${e.name}: ${e.message}`; status.className = "status fail"; },
+  );
+</script>
+</body>
 </html>

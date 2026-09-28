@@ -24,7 +24,7 @@ export const App = ({ h, useState, htm }) => {
           <input type="checkbox" checked=${t.done} onChange=${() => toggle(i)} /><span>${t.text}</span>
         </label>`)}
       <p class="status">
-        rendered with ${pkgs.map((p) => `${p.name}@${p.version} (${p.provider})`).join(" · ")}
+        rendered with ${pkgs.map((p) => `${p.specifier.replace(/@[^/@]+(?=\/|$)/, "")} → ${p.version} (${p.provider})`).join(" · ")}
       </p>`;
   };
 };

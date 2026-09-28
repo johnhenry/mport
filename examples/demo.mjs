@@ -1,21 +1,8 @@
+// The mport 1.x API, unchanged. In a browser, demo.html shows the results;
+// under Deno (`npm run demo`) they are logged.
 import mport, { MPort, MPortURL } from "../src/index.mjs";
+import { runDemo as run } from "./demo-run.mjs";
 
-const name = `lodash-es`;
-const version = `4.17.21`;
-const path = `lodash.js`;
+export const runDemo = (options = {}) => run({ api: { mport, MPort, MPortURL }, ...options });
 
-{
-  const { default: _ } = await mport(`${name}@${version}/${path}`);
-  console.log(_.partition([1, 2, 3, 4], (n) => n % 2));
-}
-{
-  const mport = MPort();
-  const { default: _ } = await mport(`${name}@${version}/${path}`);
-  console.log(_.partition([1, 2, 3, 4], (n) => n % 2));
-}
-{
-  const mport = MPortURL();
-  const [{ default: _ }, url] = await mport({ name, version, path });
-  console.log("URL:", url);
-  console.log(_.partition([1, 2, 3, 4], (n) => n % 2));
-}
+if (typeof document === "undefined") await runDemo();

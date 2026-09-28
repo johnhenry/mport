@@ -36,7 +36,7 @@
   };
   const traceList = (trace = []) => h("ol", { className: "trace" }, ...trace.map((e) =>
     h("li", {}, h("span", { className: e.type, textContent: e.type }), h("span", { textContent: e.provider }),
-      h("span", { className: "url", textContent: e.url ?? e.reason ?? e.error ?? "" }), h("span", { textContent: e.ms != null ? `${Math.round(e.ms)} ms` : "" }))));
+      h("span", { className: "url", textContent: [e.url, e.reason, e.error].filter(Boolean).join(" — ") }), h("span", { textContent: e.ms != null ? `${Math.round(e.ms)} ms` : "" }))));
   const show = (id, ...nodes) => document.querySelector(`#${id} .out`).replaceChildren(...nodes);
   const pre = (v) => h("pre", { textContent: typeof v === "string" ? v : JSON.stringify(v, null, 2) });
   const fail = (id) => (e) => show(id, pre(`${e.name}: ${e.message}`), traceList(e.trace));
@@ -44,7 +44,13 @@
   const demos = {
     async race() {
       const [mod, url, info] = await MPortURL()("lodash-es@4.17.21/lodash.js");
-      show("race", pre(`winner: ${url}\n_.chunk([1,2,3,4], 2) → ${JSON.stringify(mod.default.chunk([1, 2, 3, 4], 2))}`), traceList(info.trace));
+      const paint = () => show("race", pre(`winner: ${url}\n_.chunk([1,2,3,4], 2) → ${JSON.stringify(mod.default.chunk([1, 2, 3, 4], 2))}\nlosers keep loading after the winner is chosen (an import can't be cancelled); they appear as "aborted: lost the race"`), traceList(info.trace));
+      paint();
+      // The trace array keeps growing as the losing imports finish; redraw until it settles.
+      for (let i = 0, n = info.trace.length; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        if (info.trace.length !== n) (n = info.trace.length), paint();
+      }
     },
     async fallback() {
       const router = createRouter({ "*": [custom("https://dead.invalid/"), esmSh(), jsDelivr()] });

@@ -31,9 +31,10 @@
     .lane .track { position: relative; height: 1rem; background: color-mix(in srgb, var(--fg) 4%, transparent); border-radius: 3px; }
     .bar { position: absolute; top: 0; bottom: 0; border-radius: 3px; min-width: 3px; }
     .bar.ok { background: var(--ok); } .bar.fail { background: var(--fail); } .bar.aborted { background: var(--skip); opacity: .6; } .bar.pending { background: var(--muted); } .bar.resolved { background: var(--accent); }
+    .bar.selected { background: var(--accent); opacity: .5; min-width: 6px; }
     .bar.skip { background: repeating-linear-gradient(45deg, var(--skip) 0 3px, transparent 3px 6px); width: 100% !important; left: 0 !important; opacity: .45; }
     .bar span { position: absolute; left: calc(100% + 4px); top: -2px; font: 11px ui-monospace, monospace; color: var(--muted); white-space: nowrap; }
-    .skipreason { font: 11px ui-monospace, monospace; color: var(--skip); padding-left: .5rem; }
+    .skipreason { position: absolute; inset: 0 0 0 .5rem; font: 11px/1rem ui-monospace, monospace; color: var(--skip); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .axis { display: flex; justify-content: space-between; font: 11px ui-monospace, monospace; color: var(--muted); padding-left: 7rem; }
     table { border-collapse: collapse; width: 100%; font: 13px ui-monospace, monospace; }
     th, td { text-align: left; padding: .3rem .4rem; border-bottom: 1px solid var(--line); }
@@ -243,7 +244,9 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
       else {
         const start = open.get(`${e.provider} ${e.url}`);
         open.delete(`${e.provider} ${e.url}`);
-        const label = e.type === "resolved" ? `→ ${e.version} ${Math.round(e.ms ?? 0)}ms` : `${e.type} ${Math.round(e.ms ?? 0)}ms`;
+        const label = e.type === "resolved" ? `→ ${e.version} ${Math.round(e.ms ?? 0)}ms`
+          : e.type === "selected" ? "selected (probe: none)"
+          : e.reason ? `${e.type}: ${e.reason}` : `${e.type} ${Math.round(e.ms ?? 0)}ms`;
         lane(e.provider).bars.push({ type: e.type, start: (start?.at ?? e.at) - t0, end: e.at - t0, label });
       }
     }
@@ -257,7 +260,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
             l.bars.length === 0 && l.skips.length ? h("div", { className: "bar skip", title: l.skips.join("; ") }) : null,
             l.bars.map((b) => h("div", { className: `bar ${b.type}`, title: b.label,
               style: { left: `${(b.start / max) * 80}%`, width: `${Math.max(0.5, ((b.end - b.start) / max) * 80)}%` } }, h("span", {}, b.label))),
-            l.skips.length && l.bars.length === 0 ? h("span", { className: "skipreason" }, `skipped: ${l.skips[0]}`) : null,
+            l.skips.length && l.bars.length === 0 ? h("span", { className: "skipreason", title: l.skips.join("\n") }, `skipped: ${l.skips[0]}`) : null,
           )))),
       h("div", { className: "axis" }, h("span", {}, "0 ms"), h("span", {}, `${Math.round(max)} ms`)));
   }

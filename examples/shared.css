@@ -27,4 +27,5 @@ pre { background: color-mix(in srgb, var(--fg) 5%, transparent); padding: .75rem
 button { font: inherit; font-size: 14px; padding: .35rem .8rem; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 6px; cursor: pointer; }
 button:hover { border-color: var(--accent); }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
-.ok { color: var(--ok); } .fail { color: var(--fail); } .skip, .aborted { color: var(--skip); } .probe { color: var(--muted); }
+.ok { color: var(--ok); } .fail { color: var(--fail); } .skip, .aborted { color: var(--skip); } .probe, .lookup { color: var(--muted); }
+.resolved, .selected { color: var(--accent); }

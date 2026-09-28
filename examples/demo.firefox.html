@@ -1,4 +1,44 @@
 <!DOCTYPE html>
 <html lang="en">
-  <script type="module" src="./demo.firefox.mjs"></script>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mport 1.x demo (Firefox entry)</title>
+  <link rel="stylesheet" href="./shared.css">
+  <style>
+    main { max-width: 60rem; }
+    .call { border-top: 1px solid var(--line); padding: .75rem 0; }
+    .call h2 { font: 600 14px/1.4 ui-monospace, monospace; margin: 0 0 .25rem; }
+    .status { color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+<header class="top"><nav><a href="./index.html">mport examples</a> / <b>1.x demo, Firefox entry</b></nav></header>
+<main>
+  <h1>The 1.x API via <code>mport/firefox</code></h1>
+  <p class="lead">The same calls through the Firefox entry point, which never uses two-argument <code>import()</code> (older Firefox rejects it at parse time) and reads <code>package.json</code> with <code>fetch</code>.</p>
+  <p class="status" id="status">running against the real CDNs…</p>
+  <div id="out"></div>
+</main>
+<script type="module">
+  import { runFirefoxDemo } from "./demo.firefox.mjs";
+  const out = document.querySelector("#out");
+  const status = document.querySelector("#status");
+  const report = (label, value) => {
+    const section = document.createElement("section");
+    section.className = "call";
+    const h = document.createElement("h2");
+    h.textContent = label;
+    const pre = document.createElement("pre");
+    pre.textContent = value;
+    section.append(h, pre);
+    out.append(section);
+    console.log(label, value);
+  };
+  runFirefoxDemo(report).then(
+    () => { status.textContent = "done — the same calls also log to the console"; status.className = "status ok"; },
+    (e) => { status.textContent = `${e.name}: ${e.message}`; status.className = "status fail"; },
+  );
+</script>
+</body>
 </html>

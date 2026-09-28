@@ -1,21 +1,7 @@
+// The same 1.x demo against the Firefox entry point (no two-argument import()).
 import mport, { MPort, MPortURL } from "../src/firefox.mjs";
+import { runDemo } from "./demo-run.mjs";
 
-const name = `lodash-es`;
-const version = `4.17.21`;
-const path = `lodash.js`;
+export const runFirefoxDemo = (report) => runDemo({ api: { mport, MPort, MPortURL }, report });
 
-{
-  const { default: _ } = await mport(`${name}@${version}/${path}`);
-  console.log(_.partition([1, 2, 3, 4], (n) => n % 2));
-}
-{
-  const mport = MPort();
-  const { default: _ } = await mport(`${name}@${version}/${path}`);
-  console.log(_.partition([1, 2, 3, 4], (n) => n % 2));
-}
-{
-  const mport = MPortURL();
-  const [{ default: _ }, url] = await mport({ name, version, path });
-  console.log("URL:", url);
-  console.log(_.partition([1, 2, 3, 4], (n) => n % 2));
-}
+if (typeof document === "undefined") await runFirefoxDemo();
