@@ -267,7 +267,10 @@ export function createRouter(routes, options = {}) {
 // per-call signal; instead the caller's await rejects as soon as it aborts.
 function abortable(promise, signal) {
   if (!signal) return promise;
-  signal.throwIfAborted();
+  if (signal.aborted) {
+    promise.catch(() => {}); // the caller gets the abort reason; don't leak the inner rejection
+    return Promise.reject(signal.reason);
+  }
   return new Promise((resolve, reject) => {
     const onAbort = () => reject(signal.reason);
     signal.addEventListener("abort", onAbort, { once: true });

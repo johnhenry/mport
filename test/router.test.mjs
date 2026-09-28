@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   createRouter, route, esmSh, jsDelivr, unpkg, jspm, jsr, github, local, custom,
-  fallback, race, adaptive, weighted, prefer, verified, cache, sri,
+  fallback, race, adaptive, weighted, prefer, verified, cache, sri, SkipError,
 } from "../src/core.mjs";
 import { fakeFetch, registryFixtures, clock } from "./helpers.mjs";
 
@@ -268,4 +268,14 @@ test("verified() mismatches are recorded in the trace", async () => {
   const expected = await sri(new TextEncoder().encode("good"));
   const r = await createRouter({ "*": [verified(unpkg()), verified(esmSh())] }, { fetch }).resolve("react@19.2.0", { integrity: expected });
   assert.ok(r.trace.some((e) => e.type === "fail" && e.phase === "integrity" && e.provider === "unpkg"));
+});
+
+test("fallback reports the abort reason, not a skipped node's error", async () => {
+  const ac = new AbortController();
+  const node = {
+    kind: "test", name: "aborter",
+    async select() { ac.abort(new Error("user cancelled")); throw new SkipError("aborter: skipped"); },
+  };
+  const router = createRouter({ "*": fallback(node, esmSh()) }, { probe: "none", fetch: fakeFetch(registryFixtures) });
+  await assert.rejects(router.resolve("react@19.2.0", { signal: ac.signal }), /user cancelled/);
 });

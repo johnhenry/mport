@@ -91,7 +91,9 @@ export function fallback(...args) {
         try {
           return await node.select(req, c);
         } catch (e) {
-          if (isAbort(e, ctx.signal) || e?.name === "ResolutionError") throw e;
+          // once the caller aborts, report the abort, not whatever the node was holding
+          if (ctx.signal?.aborted) throw ctx.signal.reason ?? e;
+          if (e?.name === "AbortError" || e?.name === "ResolutionError") throw e;
           errors.push(e);
         }
       }
