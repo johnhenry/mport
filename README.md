@@ -210,7 +210,7 @@ const { importMap, lock } = await router.build(
 {
   "lockfileVersion": 1,
   "packages": {
-    "npm:react@^19": {
+    "react@^19": {
       "specifier": "react@^19", "registry": "npm", "name": "react", "range": "^19",
       "version": "19.2.0", "build": "esm.sh", "provider": "esm.sh",
       "url": "https://esm.sh/react@19.2.0"
@@ -218,6 +218,8 @@ const { importMap, lock } = await router.build(
   }
 }
 ```
+
+Keys are the specifier as written: a registry prefix appears only if you wrote one (`npm:react@^19`), and the entry's `registry` says which registry actually served the package. A bare `@std/path@^1` routed to JSR is keyed `@std/path@^1` with `"registry": "jsr"`.
 
 Pass the lockfile back in with `createRouter(routes, { lock })` and the same versions come back without asking the registry again. The same entry files and builds come back too. Passing `{ relock: true }` to `resolve` ignores the lock.
 

@@ -21,7 +21,7 @@ test("mport build writes an import map and lockfile from a config; resolve print
   const map = JSON.parse(await readFile(join(dir, "importmap.json"), "utf8"));
   assert.deepEqual(map.imports, { react: "https://esm.sh/react@19.2.0", "lit/": "https://esm.sh/lit@3.3.1/" });
   const lock = JSON.parse(await readFile(join(dir, "mport.lock.json"), "utf8"));
-  assert.equal(lock.packages["npm:react@19.2.0"].provider, "esm.sh");
+  assert.equal(lock.packages["react@19.2.0"].provider, "esm.sh");
   assert.match(out[0], /2 imports/);
 
   const printed = [];

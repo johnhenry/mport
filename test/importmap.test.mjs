@@ -15,8 +15,8 @@ test("build() compiles exact, prefix and scoped mappings plus a lockfile", async
   });
   assert.deepEqual(importMap.scopes, { "https://legacy.example.com/": { react: "https://esm.sh/react@18.3.1" } });
   assert.equal(lock.lockfileVersion, 1);
-  assert.equal(lock.packages["npm:react@^19"].version, "19.2.0");
-  assert.equal(lock.packages["npm:react@^19"].url, "https://esm.sh/react@19.2.0");
+  assert.equal(lock.packages["react@^19"].version, "19.2.0");
+  assert.equal(lock.packages["react@^19"].url, "https://esm.sh/react@19.2.0");
 });
 
 test("mergeImportMaps: later maps win", () => {

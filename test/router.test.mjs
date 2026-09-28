@@ -93,8 +93,8 @@ test("5. same artifact, many mirrors: a lock pins the build, so only same-build 
   const fetch = fakeFetch({ ...registryFixtures, "https://cdn.jsdelivr.net/*": 503, ...ok("https://unpkg.com/"), ...ok("https://esm.sh/"), ...ok("https://ga.jspm.io/") });
   const first = createRouter({ "*": [jsDelivr(), unpkg()] }, { fetch });
   const { lock } = await first.build(["react@^19"]);
-  assert.equal(lock.packages["npm:react@^19"].build, "npm");
-  assert.equal(lock.packages["npm:react@^19"].provider, "unpkg");
+  assert.equal(lock.packages["react@^19"].build, "npm");
+  assert.equal(lock.packages["react@^19"].provider, "unpkg");
 
   const next = createRouter({ "*": [esmSh(), jspm(), jsDelivr(), unpkg()] }, { fetch, lock });
   const r = await next.resolve("react@^19");
@@ -106,7 +106,7 @@ test("5. same artifact, many mirrors: a lock pins the build, so only same-build 
 test("lock pins versions without touching the registry", async () => {
   const log = [];
   const fetch = fakeFetch({ ...ok("https://esm.sh/") }, { log });
-  const lock = { packages: { "npm:react@^19": { version: "19.0.0", build: "esm.sh" } } };
+  const lock = { packages: { "react@^19": { version: "19.0.0", build: "esm.sh" } } };
   const r = await createRouter({ "*": esmSh() }, { fetch, lock }).resolve("react@^19");
   assert.equal(r.url, "https://esm.sh/react@19.0.0");
   assert.ok(!log.some((l) => l.url.includes("registry.npmjs.org")));
@@ -318,4 +318,17 @@ test("entryInfo tells ESM from CommonJS", async () => {
   assert.deepEqual(entryInfo({ exports: { ".": { default: "./index.js" } } }), { file: "index.js", esm: false });
   assert.deepEqual(entryInfo({ exports: "./x.cjs", type: "module" }), { file: "x.cjs", esm: false });
   assert.deepEqual(entryInfo({ exports: { "./hooks": { import: "./hooks/h.js" } } }, "hooks"), { file: "hooks/h.js", esm: true });
+});
+
+test("lockfile keys are the specifier as written; the entry says which registry served it", async () => {
+  const router = createRouter({ "*": esmSh(), "@std/*": jsr() }, { probe: "none", fetch: fakeFetch(registryFixtures) });
+  const { lock } = await router.build(["react@^19", "npm:react@18.3.1", "@std/path@^1", "jsr:@std/path@1.0.0", "lit/", "gh:johnhenry/mport@v2/src/index.mjs"]);
+  assert.deepEqual(Object.keys(lock.packages), [
+    "@std/path@^1", "github:johnhenry/mport@v2/src/index.mjs", "jsr:@std/path@1.0.0", "lit", "npm:react@18.3.1", "react@^19",
+  ]);
+  assert.equal(lock.packages["@std/path@^1"].registry, "jsr", "no npm-looking key for a JSR package");
+  assert.equal(lock.packages["react@^19"].registry, "npm");
+  // and the lock pins by that key on the next run
+  const pinned = createRouter({ "*": esmSh(), "@std/*": jsr() }, { probe: "none", fetch: fakeFetch(registryFixtures), lock });
+  assert.equal((await pinned.resolve("@std/path@^1")).version, "1.1.0");
 });
