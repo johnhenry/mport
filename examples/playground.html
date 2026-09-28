@@ -193,7 +193,9 @@ jsr:@std/path@^1
       prefer: `prefer({ browser: esmSh(), raw: fallback(jsDelivr(), unpkg()) })`,
       verified: `race(${names.map((n) => `verified(${n})`).join(", ")})`,
     }[$("#strategy").value];
-    return `import { createRouter, ${[...new Set(["esmSh", "jsDelivr", "unpkg", "jspm", "jsr", "fallback", "race", "adaptive", "prefer", "verified"])].join(", ")} } from "mport";
+    const used = ["esmSh", "jsDelivr", "unpkg", "jspm", "jsr", "fallback", "race", "adaptive", "prefer", "verified"]
+      .filter((name) => new RegExp(`\\b${name}\\(`).test(node) || (name === "jsr" && $("#jsrRoute").checked));
+    return `${pinnedLock ? 'import { readFile } from "node:fs/promises";\n' : ""}import { createRouter, ${used.join(", ")} } from "mport";
 
 const router = createRouter({
   "*": ${node},${$("#jsrRoute").checked ? `\n  "@std/*": jsr(),` : ""}
