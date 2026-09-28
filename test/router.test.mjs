@@ -200,3 +200,41 @@ test("onEvent receives the same events as trace", async () => {
   await router.resolve("react@19.2.0");
   assert.deepEqual(events, ["probe", "ok"]);
 });
+
+test("registry lookups appear in the trace", async () => {
+  const router = createRouter({ "*": esmSh() }, { probe: "none", fetch: fakeFetch(registryFixtures) });
+  const r = await router.resolve("react@^19");
+  assert.deepEqual(r.trace.map((e) => `${e.type}:${e.provider}`), ["lookup:npm registry", "resolved:npm registry", "probe:esm.sh", "ok:esm.sh"]);
+  assert.equal(r.trace[1].version, "19.2.0");
+  const exact = await router.resolve("react@19.2.0");
+  assert.equal(exact.trace[0].type, "probe", "exact versions skip the lookup");
+});
+
+test("an unknown package is one ResolutionError, not a failure per provider", async () => {
+  const log = [];
+  const fetch = fakeFetch({ ...registryFixtures }, { log });
+  const router = createRouter({ "*": [esmSh(), jsDelivr(), unpkg()] }, { fetch });
+  await assert.rejects(router.resolve("@nope/missing"), (e) => e.name === "ResolutionError" && /not found/.test(e.message) && e.trace.at(-1).type === "fail");
+  assert.equal(log.filter((l) => l.url.includes("registry.npmjs.org")).length, 1);
+  const raced = createRouter({ "*": race(esmSh(), unpkg()) }, { fetch });
+  await assert.rejects(raced.resolve("@nope/missing"), { name: "ResolutionError" });
+  assert.deepEqual(router.health.snapshot(), {}, "no provider was blamed");
+});
+
+test("raw CDNs map sub-paths through package exports", async () => {
+  const router = createRouter({ "*": [jsDelivr(), esmSh()] }, { probe: "none", fetch: fakeFetch(registryFixtures) });
+  assert.equal((await router.resolve("preact@^10")).url, "https://cdn.jsdelivr.net/npm/preact@10.29.8/dist/preact.module.js", "browser condition wins");
+  assert.equal((await router.resolve("preact@^10/hooks")).url, "https://cdn.jsdelivr.net/npm/preact@10.29.8/hooks/dist/hooks.mjs");
+  assert.equal((await router.resolve("preact@^10/compat/client")).url, "https://cdn.jsdelivr.net/npm/preact@10.29.8/compat/dist/client.mjs", "wildcard");
+  assert.equal((await router.resolve("preact@^10/dist/preact.js")).url, "https://cdn.jsdelivr.net/npm/preact@10.29.8/dist/preact.js", "file paths are left alone");
+  const esm = createRouter({ "*": esmSh() }, { probe: "none", fetch: fakeFetch(registryFixtures) });
+  assert.equal((await esm.resolve("preact@^10/hooks")).url, "https://esm.sh/preact@10.29.8/hooks", "esm.sh resolves sub-paths itself");
+});
+
+test("routers can share a health registry", async () => {
+  const fetch = fakeFetch({ ...registryFixtures, "https://esm.sh/*": 500, ...ok("https://unpkg.com/") });
+  const a = createRouter({ "*": [esmSh(), unpkg()] }, { fetch, circuitBreaker: { failures: 1 } });
+  await a.resolve("react@19.2.0");
+  const b = createRouter({ "*": [esmSh(), unpkg()] }, { fetch, health: a.health });
+  assert.equal((await b.resolve("react@18.3.1")).trace[0].reason, "circuit open");
+});

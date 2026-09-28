@@ -29,6 +29,16 @@ export const registryFixtures = {
   [`${NPM}/react`]: { "dist-tags": { latest: "19.2.0", next: "20.0.0-rc.1" }, versions: { "18.3.1": {}, "19.0.0": {}, "19.2.0": {}, "20.0.0-rc.1": {} } },
   [`${NPM}/react/19.2.0`]: { name: "react", version: "19.2.0", main: "index.js" },
   [`${NPM}/react/18.3.1`]: { name: "react", version: "18.3.1", main: "index.js" },
+  [`${NPM}/preact`]: { "dist-tags": { latest: "10.29.8" }, versions: { "10.29.8": {} } },
+  [`${NPM}/preact/10.29.8`]: {
+    module: "dist/preact.module.js",
+    exports: {
+      ".": { types: "./src/index.d.ts", browser: "./dist/preact.module.js", import: "./dist/preact.mjs", require: "./dist/preact.js" },
+      "./hooks": { import: "./hooks/dist/hooks.mjs", require: "./hooks/dist/hooks.js" },
+      "./compat/*": { import: "./compat/dist/*.mjs" },
+      "./package.json": "./package.json",
+    },
+  },
   [`${NPM}/lit`]: { "dist-tags": { latest: "3.3.1" }, versions: { "3.3.1": {} } },
   [`${NPM}/lit/3.3.1`]: { exports: { ".": { types: "./index.d.ts", default: "./index.js" } } },
   [`${NPM}/@scope%2Fpkg`]: { "dist-tags": { latest: "1.2.3" }, versions: { "1.0.0": {}, "1.2.3": {} } },

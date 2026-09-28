@@ -4,29 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>mport v2 router</title>
+  <link rel="stylesheet" href="./shared.css">
   <style>
-    :root { color-scheme: light dark; --bg: #fbfbfa; --fg: #1d1d1b; --muted: #6b6b66; --line: #deddd7; --ok: #1f7a4d; --fail: #b3261e; --skip: #8a6d00; --accent: #3b5bdb; }
-    @media (prefers-color-scheme: dark) { :root { --bg: #161615; --fg: #ecebe6; --muted: #9c9b95; --line: #33332f; --ok: #5cc48d; --fail: #ff8a80; --skip: #e3c55b; --accent: #8ea4ff; } }
-    body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
-    main { max-width: 60rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
-    h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
-    p.lead { color: var(--muted); margin: 0 0 1.5rem; }
+    main { max-width: 60rem; }
     section { border-top: 1px solid var(--line); padding: 1rem 0; }
-    h2 { font-size: 1rem; margin: 0 0 .5rem; }
-    code, pre { font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
-    pre { background: color-mix(in srgb, var(--fg) 5%, transparent); padding: .75rem; border-radius: 6px; overflow-x: auto; margin: .5rem 0; }
     ol.trace { list-style: none; padding: 0; margin: .5rem 0; }
     ol.trace li { display: grid; grid-template-columns: 4.5rem minmax(0, 11rem) minmax(0, 1fr) 4rem; gap: .5rem; padding: .15rem 0; border-bottom: 1px dashed var(--line); font: 13px ui-monospace, monospace; }
     ol.trace li span { overflow-wrap: anywhere; min-width: 0; }
     ol.trace li span:last-child { text-align: right; color: var(--muted); }
-    .ok { color: var(--ok); } .fail { color: var(--fail); } .skip, .aborted { color: var(--skip); } .probe { color: var(--muted); }
-    .url { overflow-wrap: anywhere; }
-    button { font: inherit; padding: .35rem .8rem; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 6px; cursor: pointer; }
-    button:hover { border-color: var(--accent); }
-    @media (max-width: 40rem) { ol.trace li { grid-template-columns: 4.5rem 1fr; } ol.trace li .url { grid-column: 1 / -1; } }
+    @media (max-width: 40rem) { ol.trace li { grid-template-columns: 4.5rem minmax(0, 1fr); } ol.trace li .url { grid-column: 1 / -1; } }
   </style>
 </head>
 <body>
+<header class="top"><nav><a href="./index.html">mport examples</a> / <b>guided tour</b></nav></header>
 <main>
   <h1>mport v2 — routing imports across CDNs</h1>
   <p class="lead">Every section below runs live against the real CDNs and shows the resolution trace: which providers were probed, skipped, failed or aborted, and which one won.</p>

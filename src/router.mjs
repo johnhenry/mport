@@ -13,7 +13,8 @@
 
 import { parseSpecifier, keyOf } from "./specifier.mjs";
 import { createRegistry } from "./registry.mjs";
-import { fallback, HealthRegistry, SkipError, RoutingError } from "./strategies.mjs";
+import { valid } from "./semver.mjs";
+import { fallback, HealthRegistry, SkipError, RoutingError, note } from "./strategies.mjs";
 import { custom } from "./providers.mjs";
 import { compileImportMap } from "./importmap.mjs";
 import { createLock, lockKey } from "./lock.mjs";
@@ -59,7 +60,8 @@ const defaultProbe = (fetch) => async (url, { signal }) => {
  * @param {"head"|"import"|"none"|Function} [options.probe="head"] how a candidate URL is checked
  * @param {object} [options.lock] a lockfile (see lock.mjs) pinning versions, builds and integrity
  * @param {boolean} [options.resolveVersions=true] resolve ranges to exact versions via registries
- * @param {object} [options.circuitBreaker] { failures, reset } for the shared health registry
+ * @param {object} [options.circuitBreaker] { failures, reset } for this router's health registry
+ * @param {HealthRegistry} [options.health] share an existing health registry instead
  * @param {string} [options.target="browser"] default target for prefer()
  * @param {Function} [options.fetch] fetch implementation (tests, proxies)
  * @param {Function} [options.importer] dynamic import implementation for probe "import"
@@ -85,7 +87,8 @@ export function createRouter(routes, options = {}) {
   if (!Array.isArray(routes)) table.sort((a, b) => b.rank - a.rank || a.i - b.i);
 
   const caches = table.flatMap(({ node }) => [...walk(node)].filter((n) => n.kind === "cache"));
-  const health = new HealthRegistry({ now, ...circuitBreaker });
+  // Pass `health` to share provider health (and open circuits) between routers.
+  const health = options.health ?? new HealthRegistry({ now, ...circuitBreaker });
   const pins = createLock(lockData); // read-only: what the caller's lockfile pins
   const lock = createLock(lockData); // what this router has resolved (written back by build())
   const probeFn =
@@ -112,20 +115,39 @@ export function createRouter(routes, options = {}) {
     const getVersion = (reg = req.registry) => {
       if (!versions.has(reg)) {
         versions.set(reg, pinned?.version !== undefined ? Promise.resolve(pinned.version)
-          : resolveVersions ? registry.version({ ...req, registry: reg })
+          : resolveVersions ? lookup(reg)
           : Promise.resolve(req.range));
       }
       return versions.get(reg);
+    };
+    // Registry lookups appear in the trace as lookup → resolved / fail.
+    const lookup = async (reg) => {
+      // exact versions and GitHub refs need no network lookup
+      if (reg === "github" || (req.range && valid(req.range))) return registry.version({ ...req, registry: reg });
+      const url = `${reg}:${req.name}@${req.range ?? "latest"}`;
+      const t0 = now();
+      note(ctx, { type: "lookup", provider: `${reg} registry`, url });
+      try {
+        const version = await registry.version({ ...req, registry: reg });
+        note(ctx, { type: "resolved", provider: `${reg} registry`, url, version, ms: now() - t0 });
+        return version;
+      } catch (e) {
+        note(ctx, { type: "fail", provider: `${reg} registry`, url, ms: now() - t0, error: String(e?.message ?? e) });
+        throw e;
+      }
     };
     const entries = new Map();
     const getEntry = async (reg = req.registry) => {
       if (!entries.has(reg)) {
         entries.set(reg, pinned?.entry ? Promise.resolve(pinned.entry)
-          : reg === "npm" ? registry.entry(req.name, await getVersion(reg))
+          : reg === "npm" ? registry.entry(req.name, await getVersion(reg), req.path)
           : Promise.resolve(undefined));
       }
       return entries.get(reg);
     };
+    // Raw file CDNs need a real file: the root entry, or a sub-path that isn't
+    // already a file name mapped through the package's exports.
+    const needsFile = !req.path || !/\.[a-z0-9]+$/i.test(req.path);
 
     const ctx = {
       target: opts.target ?? target,
@@ -142,7 +164,7 @@ export function createRouter(routes, options = {}) {
       onEvent: opts.onEvent ?? onEvent,
       async artifact(p, reg = req.registry) {
         const v = p.needsVersion ? await getVersion(reg) : req.range;
-        const e = p.needsEntry && !req.path ? await getEntry(reg) : undefined;
+        const e = p.needsEntry && needsFile ? await getEntry(reg) : undefined;
         return { registry: reg, name: req.name, version: v, path: req.path, entry: e };
       },
       async cacheKey() {

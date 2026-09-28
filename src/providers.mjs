@@ -8,7 +8,8 @@
 import { select } from "./strategies.mjs";
 
 const join = (...parts) => parts.filter(Boolean).join("/");
-const sub = (a) => a.path || a.entry;
+// the file to request: a resolved entry (root or exports-mapped sub-path) wins
+const sub = (a) => a.entry || a.path;
 
 export function provider({
   name,

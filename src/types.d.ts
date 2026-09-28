@@ -59,7 +59,9 @@ export interface Artifact {
 }
 
 export interface TraceEvent {
-  type: "probe" | "ok" | "fail" | "skip" | "aborted";
+  type: "lookup" | "resolved" | "probe" | "ok" | "fail" | "skip" | "aborted";
+  /** for "resolved": the exact version the registry lookup chose */
+  version?: string;
   /** "import" when router.import() failed to load a resolved URL */
   phase?: "import";
   provider: string;
@@ -128,6 +130,8 @@ export interface RouterOptions {
   lock?: Lockfile;
   resolveVersions?: boolean;
   circuitBreaker?: { failures?: number; reset?: number | string };
+  /** share provider health and open circuits with another router */
+  health?: HealthRegistry;
   target?: string;
   capabilities?: string[];
   fetch?: typeof fetch;
@@ -195,6 +199,9 @@ export class SkipError extends Error {}
 export class IntegrityError extends Error {}
 export class ResolutionError extends Error {}
 
+export function entryOf(pkg: Record<string, unknown>, subpath?: string): string;
+export function resolveExports(exportsField: unknown, subpath?: string): string | undefined;
+export function createRegistry(o?: { fetch?: typeof fetch; npm?: string; jsr?: string }): { version(parsed: object): Promise<string | undefined>; entry(name: string, version: string, subpath?: string): Promise<string> };
 export function parseSpecifier(input: string | MPortOptions): { registry: Registry; explicit: boolean; name: string; range?: string; path: string; prefix: boolean } | null;
 export function compileImportMap(resolved: Resolution[], scoped?: Record<string, Resolution[]>): ImportMap;
 export function mergeImportMaps(...maps: ImportMap[]): ImportMap;

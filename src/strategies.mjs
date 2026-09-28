@@ -21,7 +21,7 @@ export class IntegrityError extends Error {
 const isAbort = (e, signal) => signal?.aborted || e?.name === "AbortError";
 
 /** Record one attempt in ctx.trace and pass it to ctx.onEvent. */
-const note = (ctx, event) => {
+export const note = (ctx, event) => {
   const e = { ...event, at: ctx.now?.() };
   ctx.trace?.push(e);
   try { ctx.onEvent?.(e); } catch {}
@@ -91,7 +91,7 @@ export function fallback(...args) {
         try {
           return await node.select(req, c);
         } catch (e) {
-          if (isAbort(e, ctx.signal)) throw e;
+          if (isAbort(e, ctx.signal) || e?.name === "ResolutionError") throw e;
           errors.push(e);
         }
       }
@@ -117,6 +117,8 @@ export function race(...nodes) {
         return winner;
       } catch (e) {
         if (ctx.signal?.aborted) throw ctx.signal.reason ?? e;
+        const resolution = e.errors?.find((x) => x?.name === "ResolutionError");
+        if (resolution) throw resolution;
         throw new RoutingError(e.errors ?? [e], `mport: every provider failed for ${req.raw ?? req.name}`);
       } finally {
         ctx.signal?.removeEventListener("abort", onAbort);
@@ -251,14 +253,14 @@ export class HealthRegistry {
     if (++s.streak >= this.threshold) s.openUntil = this.now() + this.reset;
   }
   isOpen(name) {
-    return this.#get(name).openUntil > this.now();
+    return (this.#state.get(name)?.openUntil ?? 0) > this.now();
   }
   successRate(name) {
-    const { ok, fail } = this.#get(name);
+    const { ok = 0, fail = 0 } = this.#state.get(name) ?? {};
     return (ok + 1) / (ok + fail + 1);
   }
   latency(name) {
-    return this.#get(name).latency;
+    return this.#state.get(name)?.latency;
   }
   snapshot() {
     return Object.fromEntries([...this.#state].map(([k, v]) => [k, { ...v, healthy: !this.isOpen(k) }]));

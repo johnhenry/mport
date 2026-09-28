@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mport startup</title>
+  <link rel="stylesheet" href="./shared.css">
+  <style>
+    main { max-width: 60rem; }
+    #app { border: 1px solid var(--line); border-radius: 8px; padding: 1rem; margin: 1rem 0; min-height: 6rem; }
+    .todo { display: flex; gap: .5rem; align-items: center; padding: .25rem 0; }
+    .todo.done span { text-decoration: line-through; color: var(--muted); }
+    input[type=text] { font: inherit; padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--fg); min-width: 0; flex: 1; }
+    form { display: flex; gap: .5rem; margin-bottom: .75rem; }
+    .status { font: 13px ui-monospace, monospace; color: var(--muted); }
+  </style>
+</head>
+<body>
+<header class="top"><nav><a href="./index.html">mport examples</a> / <b>import maps at startup</b></nav></header>
+<main>
+  <h1>Resolve once, then import natively</h1>
+  <p class="lead"><code>startup(router, specifiers)</code> resolves each package, injects a <code>&lt;script type="importmap"&gt;</code>, and returns the lockfile. After that, <code>startup-app.mjs</code> uses plain <code>import { h, render } from "preact"</code>. The browser handles those imports itself, and mport is not involved.</p>
+  <p class="status" id="status">resolving…</p>
+  <div id="app"></div>
+  <h2>Injected import map</h2>
+  <pre id="map">…</pre>
+  <h2>How this page boots</h2>
+<pre>import { createRouter, startup, esmSh, jsDelivr } from "mport";
+
+const router = createRouter({ "*": [esmSh(), jsDelivr({ esm: true })] });
+const { importMap, lock } = await startup(router, ["preact@^10", "preact@^10/hooks", "htm@^3"]);
+
+await import("./startup-app.mjs"); // its static imports now go through the import map</pre>
+  <p class="status">Browsers only accept an import map injected after modules have started loading if they support dynamic import maps (Chromium 133+). Otherwise this page says so and loads the app through <code>router.import()</code> instead.</p>
+</main>
+<script type="module">
+  import { createRouter, startup, esmSh, jsDelivr } from "../src/index.mjs";
+
+  const status = document.querySelector("#status");
+  const router = createRouter({ "*": [esmSh(), jsDelivr({ esm: true })] });
+  const t0 = performance.now();
+  const { importMap, lock } = await startup(router, ["preact@^10", "preact@^10/hooks", "htm@^3"]);
+  document.querySelector("#map").textContent = JSON.stringify(importMap, null, 2);
+  const ms = Math.round(performance.now() - t0);
+  try {
+    const app = await import("./startup-app.mjs");
+    app.mount(document.querySelector("#app"), { lock });
+    status.textContent = `resolved ${Object.keys(importMap.imports).length} specifiers in ${ms} ms · app loaded through the native import map`;
+    status.className = "status ok";
+  } catch (e) {
+    status.textContent = `this browser ignored the injected import map (${e.message}); falling back to router.import()`;
+    status.className = "status skip";
+    const [{ h, render }, { useState }, { default: htm }] = await Promise.all(["preact@^10", "preact@^10/hooks", "htm@^3"].map((s) => router.import(s)));
+    const { App } = await import("./startup-view.mjs");
+    render(h(App({ h, useState, htm }), { lock }), document.querySelector("#app"));
+  }
+</script>
+</body>
+</html>

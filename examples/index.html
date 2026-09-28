@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mport examples</title>
+  <link rel="stylesheet" href="./shared.css">
+  <style>
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem; }
+    .cards a { display: block; border: 1px solid var(--line); border-radius: 8px; padding: 1rem; color: inherit; text-decoration: none; }
+    .cards a:hover { border-color: var(--accent); }
+    .cards h2 { color: var(--accent); }
+    .cards p { margin: 0; color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+<header class="top"><nav><b>mport examples</b></nav></header>
+<main>
+  <h1>mport examples</h1>
+  <p class="lead">mport routes JavaScript imports across any number of CDNs. Which exact version you get is decided once; which CDN serves it can change. These pages run in your browser against the real CDNs. Serve the repo root (<code>npm run demo:html</code>) and open them from there.</p>
+  <div class="cards">
+    <a href="./playground.html"><h2>Playground</h2><p>Build a router, simulate CDN outages and latency, and watch each lookup on a timeline. Covers fallback, race, adaptive and prefer, integrity checks, the circuit breaker, and import-map and lockfile output.</p></a>
+    <a href="./router.html"><h2>Guided tour</h2><p>Four short scenarios: the v1 race with debug info, a fallback past a dead mirror, routing by package name compiled to an import map, and retrying another CDN at runtime with <code>router.import()</code>.</p></a>
+    <a href="./startup.html"><h2>Import maps at startup</h2><p><code>startup()</code> resolves packages and injects a <code>&lt;script type="importmap"&gt;</code>, then plain <code>import "preact"</code> works natively and renders a small app.</p></a>
+    <a href="./demo.html"><h2>1.x demo</h2><p>The original <code>mport()</code>, <code>MPort()</code> and <code>MPortURL()</code> calls, unchanged. Output goes to the console.</p></a>
+  </div>
+</main>
+</body>
+</html>

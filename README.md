@@ -144,7 +144,7 @@ Patterns match the specifier without its version, e.g. `npm:react/jsx-runtime`. 
 | Provider | Build | Registries | Notes |
 |---|---|---|---|
 | `esmSh()` | `esm.sh` | npm, jsr, github | transforms to browser ESM |
-| `jsDelivr()` | `npm` | npm, github | raw files; the entry comes from `exports` → `module` → `main` |
+| `jsDelivr()` | `npm` | npm, github | raw files. The entry comes from `exports` → `module` → `main`, and sub-paths such as `preact/hooks` are mapped through `exports` |
 | `jsDelivr({ esm: true })` | `jsdelivr-esm` | npm | jsDelivr's `/+esm` bundles |
 | `unpkg()` | `npm` | npm | raw files |
 | `jspm()` | `jspm` | npm | `ga.jspm.io` builds |
@@ -270,11 +270,13 @@ r.trace;
 //   { type: "ok",    provider: "jsdelivr", ms: 41 } ]
 ```
 
-Event types are `probe`, `ok`, `fail`, `skip` (with a `reason`) and `aborted` (a race loser). Failed resolutions attach the same list as `error.trace`.
+Event types are `lookup` / `resolved` (a registry lookup that turned a range into a version), `probe`, `ok`, `fail`, `skip` (with a `reason`) and `aborted` (a race loser). Failed resolutions attach the same list as `error.trace`.
+
+Resolutions that can't happen at all, such as an unknown package or an impossible range, reject with a single `ResolutionError`. No CDN is blamed or put in its circuit.
 
 To stream events, pass `onEvent` to `createRouter` or to a single `resolve`/`import` call. `router.import()` also reports `{ type: "fail", phase: "import" }` when a resolved URL fails to load and it moves to another mirror.
 
-`router.health.snapshot()` returns per-provider counts, latency and circuit state.
+`router.health.snapshot()` returns per-provider counts, latency and circuit state. Pass `health: otherRouter.health` to `createRouter` to share that state between routers.
 
 In the v1 API, `MPortURL` returns this as a third tuple element, so existing destructuring keeps working:
 
@@ -329,10 +331,17 @@ The default race still mixes builds (raw jsDelivr/unpkg files against jspm's tra
 ## Demos
 
 ```bash
-npm run demo:html   # then open http://localhost:8712/examples/router.html
+npm run demo:html   # then open http://localhost:8712/examples/
 ```
 
-`examples/router.html` runs against the real CDNs and shows the trace for a race, a fallback with a dead mirror, namespace routing that compiles to an import map, and runtime failover. `examples/demo.html` is the 1.x demo.
+| Page | What it shows |
+|---|---|
+| `examples/playground.html` | Build a router, simulate CDN outages and latency per provider, and watch each lookup on a timeline (registry lookups, probes, skips, aborted race losers). Covers every strategy, a live health and circuit table, lockfile pinning across runs, and the import map, lockfile and equivalent config, which you can copy or download |
+| `examples/router.html` | A guided tour: the v1 race with debug info, a fallback past a dead mirror, routing by package name compiled to an import map, and runtime failover with `router.import()` |
+| `examples/startup.html` | `startup()` injects an import map, then a Preact + htm app loads through plain `import "preact"` |
+| `examples/demo.html` | The unchanged 1.x demo (output goes to the console) |
+
+These pages talk to the real CDNs and registries.
 
 ## License
 
