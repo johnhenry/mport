@@ -62,8 +62,8 @@ export interface TraceEvent {
   type: "lookup" | "resolved" | "probe" | "ok" | "fail" | "skip" | "aborted";
   /** for "resolved": the exact version the registry lookup chose */
   version?: string;
-  /** "import" when router.import() failed to load a resolved URL */
-  phase?: "import";
+  /** "import": router.import() failed to load a resolved URL; "integrity": verified() rejected it */
+  phase?: "import" | "integrity";
   provider: string;
   url?: string;
   ms?: number;

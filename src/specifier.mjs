@@ -33,6 +33,9 @@ export function parseSpecifier(input) {
     throw new TypeError(`mport: invalid specifier ${JSON.stringify(input)}`);
   }
   if (!isRoutable(input)) return null;
+  // Other schemes ("node:fs", "partial:card") are not packages.
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(input)?.[0];
+  if (scheme && !(scheme.toLowerCase() in PREFIXES)) return null;
 
   let rest = input;
   let registry = "npm";
@@ -51,7 +54,9 @@ export function parseSpecifier(input) {
   // name is "user/repo" for github, "@scope/name" for scoped, else "name"
   const segments = rest.split("/");
   const twoPart = registry === "github" || rest.startsWith("@");
-  if (twoPart && segments.length < 2) {
+  if (twoPart && (segments.length < 2 || !segments[1])) {
+    // A bare "@scope" is an alias, not a package; explicit prefixes must be complete.
+    if (!explicit && rest.startsWith("@")) return null;
     throw new TypeError(`mport: specifier "${input}" needs a scope/owner and a name`);
   }
   const head = twoPart ? `${segments[0]}/${segments[1]}` : segments[0];

@@ -184,6 +184,7 @@ export function verified(node, { algorithm = "sha384" } = {}) {
       const expected = ctx.integrity;
       if (expected && expected !== integrity) {
         ctx.health?.failure(r.provider);
+        note(ctx, { type: "fail", phase: "integrity", provider: r.provider, url: r.url, error: `expected ${expected}, got ${integrity}` });
         throw new IntegrityError(`mport: integrity mismatch for ${r.url}: expected ${expected}, got ${integrity}`);
       }
       return { ...r, integrity };

@@ -238,3 +238,34 @@ test("routers can share a health registry", async () => {
   const b = createRouter({ "*": [esmSh(), unpkg()] }, { fetch, health: a.health });
   assert.equal((await b.resolve("react@18.3.1")).trace[0].reason, "circuit open");
 });
+
+test("exclude accepts any iterable", async () => {
+  const router = createRouter({ "*": [esmSh(), unpkg()] }, { probe: "none", fetch: fakeFetch(registryFixtures) });
+  assert.equal((await router.resolve("react@19.2.0", { exclude: ["esm.sh"] })).provider, "unpkg");
+});
+
+test("abort: a pre-aborted signal rejects immediately; aborting mid-lookup rejects promptly", async () => {
+  const router = createRouter({ "*": esmSh() }, { fetch: fakeFetch({ ...registryFixtures, ...ok("https://esm.sh/") }, { delays: { "https://registry.npmjs.org/": 200 } }) });
+  const done = new AbortController();
+  done.abort(new Error("stop"));
+  await assert.rejects(router.resolve("react@^19", { signal: done.signal }), /stop/);
+  const ac = new AbortController();
+  const t0 = Date.now();
+  const p = router.resolve("react@^19", { signal: ac.signal });
+  setTimeout(() => ac.abort(new Error("later")), 10);
+  await assert.rejects(p, /later/);
+  assert.ok(Date.now() - t0 < 150, "did not wait for the slow registry");
+});
+
+test("build() rejects specifiers it cannot route instead of dropping them", async () => {
+  const router = createRouter({ "react": esmSh() }, { probe: "none", fetch: fakeFetch(registryFixtures) });
+  await assert.rejects(router.build(["react@19.2.0", "lit"]), (e) => e.name === "ResolutionError" && /"lit"/.test(e.message));
+  await assert.rejects(router.build(["./x.js"]), /no route/);
+});
+
+test("verified() mismatches are recorded in the trace", async () => {
+  const fetch = fakeFetch({ ...registryFixtures, "https://unpkg.com/*": "tampered", "https://esm.sh/*": "good" });
+  const expected = await sri(new TextEncoder().encode("good"));
+  const r = await createRouter({ "*": [verified(unpkg()), verified(esmSh())] }, { fetch }).resolve("react@19.2.0", { integrity: expected });
+  assert.ok(r.trace.some((e) => e.type === "fail" && e.phase === "integrity" && e.provider === "unpkg"));
+});

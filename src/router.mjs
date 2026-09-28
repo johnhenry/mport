@@ -12,7 +12,7 @@
 // globs beat shorter ones; "*" is the catch-all.
 
 import { parseSpecifier, keyOf } from "./specifier.mjs";
-import { createRegistry } from "./registry.mjs";
+import { createRegistry, ResolutionError } from "./registry.mjs";
 import { valid } from "./semver.mjs";
 import { fallback, HealthRegistry, SkipError, RoutingError, note } from "./strategies.mjs";
 import { custom } from "./providers.mjs";
@@ -104,6 +104,7 @@ export function createRouter(routes, options = {}) {
   };
 
   async function resolve(specifier, opts = {}) {
+    opts.signal?.throwIfAborted();
     const req = parseSpecifier(specifier);
     if (!req) return null;
     const hit = match(req);
@@ -154,7 +155,7 @@ export function createRouter(routes, options = {}) {
       capabilities: opts.capabilities ?? capabilities,
       build: opts.build ?? pinned?.build,
       integrity: opts.integrity ?? pinned?.integrity,
-      exclude: opts.exclude,
+      exclude: opts.exclude == null || opts.exclude instanceof Set ? opts.exclude : new Set(opts.exclude),
       signal: opts.signal,
       health,
       fetch,
@@ -175,7 +176,7 @@ export function createRouter(routes, options = {}) {
 
     let result;
     try {
-      result = await hit.node.select(req, ctx);
+      result = await abortable(hit.node.select(req, ctx), opts.signal);
     } catch (e) {
       if (e && typeof e === "object") e.trace = ctx.trace;
       throw e;
@@ -242,16 +243,36 @@ export function createRouter(routes, options = {}) {
     import: importModule,
     /** Resolve many specifiers and compile an import map plus lockfile. */
     async build(specifiers, { scopes = {}, signal } = {}) {
-      const resolved = await Promise.all(specifiers.map((s) => resolve(s, { signal })));
+      const resolved = await Promise.all(specifiers.map(async (s) => {
+        const r = await resolve(s, { signal });
+        if (r === null) throw new ResolutionError(`mport: no route for "${s}" (relative, URL, non-package or unmatched specifier)`);
+        return r;
+      }));
       const scoped = {};
       for (const [scope, map] of Object.entries(scopes)) {
         scoped[scope] = await Promise.all(
-          Object.entries(map).map(async ([key, spec]) => ({ ...(await resolve(spec, { signal })), key })),
+          Object.entries(map).map(async ([key, spec]) => {
+            const r = await resolve(spec, { signal });
+            if (r === null) throw new ResolutionError(`mport: no route for "${spec}" in scope ${scope}`);
+            return { ...r, key };
+          }),
         );
       }
       return { importMap: compileImportMap(resolved.filter(Boolean), scoped), lock: lock.toJSON() };
     },
   };
+}
+
+// Registry lookups and import probes are shared/memoized, so they can't take a
+// per-call signal; instead the caller's await rejects as soon as it aborts.
+function abortable(promise, signal) {
+  if (!signal) return promise;
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
 }
 
 function baseOf(node, result, out) {

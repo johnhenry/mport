@@ -45,3 +45,8 @@ test("object form and unroutable specifiers", () => {
     assert.equal(parseSpecifier(s), null, s);
   }
 });
+
+test("other schemes and bare scopes are not packages", () => {
+  for (const s of ["node:fs", "partial:card", "virtual:thing", "@lib", "@lib/"]) assert.equal(parseSpecifier(s), null, s);
+  assert.throws(() => parseSpecifier("github:user"), /owner/);
+});
