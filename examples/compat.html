@@ -20,9 +20,9 @@
 <header class="top"></header>
 <main>
   <h1>1.x compatibility</h1>
-  <p class="lead">mport 2.0 keeps the 1.x API (<code>mport()</code>, <code>MPort()</code>, <code>MPortURL()</code>) working unchanged, as a thin layer over the router. This page runs the 1.x calls against the real CDNs through both entry points: the standard one, and <code>mport/firefox</code>, which older Firefox needs because it rejects two-argument <code>import()</code> at parse time.</p>
+  <p class="lead">mport 2.0 keeps the 1.x API (<code>mport()</code>, <code>MPort()</code>, <code>MPortURL()</code>) working unchanged, as a thin layer over the router. This page runs the 1.x calls against the real CDNs through both entry points: the standard one, and <code>@johnhenry/mport/firefox</code>, which older Firefox needs because it rejects two-argument <code>import()</code> at parse time.</p>
   <p class="summary" id="summary">running…</p>
-  <div class="table-wrap"><table class="compat"><thead><tr><th>1.x guarantee</th><th>mport</th><th>mport/firefox</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="table-wrap"><table class="compat"><thead><tr><th>1.x guarantee</th><th>@johnhenry/mport</th><th>@johnhenry/mport/firefox</th></tr></thead><tbody id="rows"></tbody></table></div>
   <h2 style="margin-top:1.5rem">What <code>MPortURL()</code> did</h2>
   <p class="hint">The same race, traced, through each entry point. New in 2.0: the third element, <code>info</code>, carries this trace; <code>[module, url]</code> destructuring from 1.x is unaffected.</p>
   <div id="legend"></div>
@@ -122,7 +122,7 @@
   summary.className = `summary ${failed ? "fail" : "ok"}`;
 
   // Traces: one MPortURL race per entry point.
-  for (const [name, api] of [["mport", standard], ["mport/firefox", firefox]]) {
+  for (const [name, api] of [["@johnhenry/mport", standard], ["@johnhenry/mport/firefox", firefox]]) {
     const [, , info] = await api.MPortURL()(LODASH);
     await sleep(1500);
     document.querySelector("#traces").append(card(`${name}: MPortURL()("${LODASH}")`, { ...info, build: "", trace: info.trace }, null, Math.min(...info.trace.map((e) => e.at))));

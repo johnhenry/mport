@@ -1,25 +1,68 @@
 {
-  "name": "mport",
-  "version": "2.0.0",
+  "name": "@johnhenry/mport",
+  "version": "0.0.0",
   "description": "Route JavaScript imports across any number of CDNs: deterministic resolution, adaptive transport (fallback, race, weighted, health-aware), compiled to standard import maps.",
-  "homepage": "https://github.com/johnhenry/mport",
-  "repository": { "type": "git", "url": "git+https://github.com/johnhenry/mport.git" },
+  "homepage": "https://opensource.johnhenry.me/mport/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/johnhenry/mport.git"
+  },
+  "bugs": {
+    "url": "https://github.com/johnhenry/mport/issues"
+  },
   "author": "John Henry <john@iamjohnhenry.com>",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=18.0.0" },
+  "engines": {
+    "node": ">=26.0.0"
+  },
   "main": "./src/index.mjs",
   "module": "./src/index.mjs",
   "types": "./src/types.d.ts",
   "exports": {
-    ".": { "types": "./src/types.d.ts", "default": "./src/index.mjs" },
-    "./firefox": { "types": "./src/types.d.ts", "default": "./src/firefox.mjs" },
-    "./core": { "types": "./src/types.d.ts", "default": "./src/core.mjs" },
+    ".": {
+      "types": "./src/types.d.ts",
+      "default": "./src/index.mjs"
+    },
+    "./firefox": {
+      "types": "./src/types.d.ts",
+      "default": "./src/firefox.mjs"
+    },
+    "./core": {
+      "types": "./src/types.d.ts",
+      "default": "./src/core.mjs"
+    },
     "./package.json": "./package.json"
   },
-  "bin": { "mport": "./bin/mport.mjs" },
-  "files": ["src", "bin", "README.md", "LICENSE.md"],
-  "keywords": ["import", "esm", "import-map", "importmap", "npm", "jsr", "cdn", "jsdelivr", "esm.sh", "jspm", "unpkg", "router", "fallback", "race", "dynamic-import"],
+  "bin": {
+    "mport": "./bin/mport.mjs"
+  },
+  "files": [
+    "src",
+    "bin",
+    "README.md",
+    "LICENSE.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "import",
+    "esm",
+    "import-map",
+    "importmap",
+    "npm",
+    "jsr",
+    "cdn",
+    "jsdelivr",
+    "esm.sh",
+    "jspm",
+    "unpkg",
+    "router",
+    "fallback",
+    "race",
+    "dynamic-import"
+  ],
   "scripts": {
     "test": "node --test \"test/*.test.mjs\"",
     "demo": "deno -A examples/demo.mjs",

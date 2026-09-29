@@ -164,7 +164,7 @@ lit@^3</textarea>
     }[$("#strategy").value];
     const used = ["esmSh", "jsDelivr", "unpkg", "jspm", "jsr", "fallback", "race", "adaptive", "prefer", "verified"]
       .filter((name) => new RegExp(`\\b${name}\\(`).test(node) || (name === "jsr" && $("#jsrRoute").checked) || (name === "jsDelivr" && $("#litRoute").checked));
-    return `${pinnedLock ? 'import { readFile } from "node:fs/promises";\n' : ""}import { createRouter, ${used.join(", ")} } from "mport";
+    return `${pinnedLock ? 'import { readFile } from "node:fs/promises";\n' : ""}import { createRouter, ${used.join(", ")} } from "@johnhenry/mport";
 
 const router = createRouter({
   "*": ${node},${$("#jsrRoute").checked ? `\n  "@std/*": jsr(),` : ""}${$("#litRoute").checked ? `\n  "lit*": jsDelivr(),` : ""}
@@ -425,7 +425,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
       ],
     },
     {
-      id: "v1", code: "import { MPortURL } from \"mport\"; // the 1.x API, unchanged\nconst [module, url, info] = await MPortURL()(\"lodash-es@4.17.21/lodash.js\");\n// races jsDelivr, JSPM and unpkg; info is new in 2.0: provider, trace, \u2026", title: "The 1.x API", blurb: "Old code keeps working, on the same router.",
+      id: "v1", code: "import { MPortURL } from \"@johnhenry/mport\"; // the 1.x API, unchanged\nconst [module, url, info] = await MPortURL()(\"lodash-es@4.17.21/lodash.js\");\n// races jsDelivr, JSPM and unpkg; info is new in 2.0: provider, trace, \u2026", title: "The 1.x API", blurb: "Old code keeps working, on the same router.",
       what: "<code>MPortURL()</code> is mport 1.x's API, unchanged: it races jsDelivr, JSPM and unpkg at runtime and imports from whichever answers first. In 2.0 it's a thin layer over the router, so it returns a trace too. (This scenario uses the real network, not the simulated outages.)",
       notice: [
         "All three origins are raced; the winner is imported and the rest are reported as losing the race.",
