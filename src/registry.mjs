@@ -41,7 +41,13 @@ export function createRegistry({
     if (range === undefined || range === "" || range === "latest") {
       if (tags?.latest) return tags.latest;
     }
-    const found = maxSatisfying(versions, range || "*");
+    let found;
+    try {
+      found = maxSatisfying(versions, range || "*");
+    } catch (e) {
+      // not a dist-tag and not a range ("react@beta" when there is no beta tag)
+      throw new ResolutionError(`mport: ${name} has no dist-tag "${range}" and it is not a valid range`, { cause: e });
+    }
     if (!found) throw new ResolutionError(`mport: no version of ${name} satisfies "${range}"`);
     return found;
   };

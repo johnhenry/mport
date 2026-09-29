@@ -346,3 +346,9 @@ test("router.import() fails over across builds unless a lock or opts.build pins 
   const locked = createRouter(routes(), { fetch: fakeFetch(registryFixtures), probe: "none", importer, lock: { packages: { "react@19.2.0": { version: "19.2.0", build: "esm.sh" } } } });
   await assert.rejects(locked.import("react@19.2.0"), /could not import|no provider/);
 });
+
+test("an unknown dist-tag is one ResolutionError, not a TypeError per provider", async () => {
+  const router = createRouter({ "*": [esmSh(), unpkg()] }, { probe: "none", fetch: fakeFetch(registryFixtures) });
+  await assert.rejects(router.resolve("react@beta"), (e) => e.name === "ResolutionError" && /no dist-tag "beta"/.test(e.message));
+  assert.deepEqual(router.health.snapshot(), {});
+});
