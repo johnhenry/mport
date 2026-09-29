@@ -1,10 +1,10 @@
 // The app, written against injected dependencies so it can run either through
-// the native import map (startup-app.mjs) or router.import() (the fallback).
+// the native import map (app-main.mjs) or modules loaded with router.import().
 export const App = ({ h, useState, htm }) => {
   const html = htm.bind(h);
-  return function TodoApp({ lock }) {
+  return function TodoApp({ sources }) {
     const [todos, setTodos] = useState([
-      { text: "Resolve react@^19 once", done: true },
+      { text: "Resolve each package once", done: true },
       { text: "Let any mirror of the same build serve it", done: false },
     ]);
     const [text, setText] = useState("");
@@ -13,7 +13,6 @@ export const App = ({ h, useState, htm }) => {
       if (text.trim()) setTodos([...todos, { text: text.trim(), done: false }]), setText("");
     };
     const toggle = (i) => setTodos(todos.map((t, j) => (j === i ? { ...t, done: !t.done } : t)));
-    const pkgs = Object.values(lock.packages);
     return html`
       <form onSubmit=${add}>
         <input type="text" value=${text} onInput=${(e) => setText(e.target.value)} placeholder="Add a todo" aria-label="New todo" />
@@ -24,7 +23,7 @@ export const App = ({ h, useState, htm }) => {
           <input type="checkbox" checked=${t.done} onChange=${() => toggle(i)} /><span>${t.text}</span>
         </label>`)}
       <p class="status">
-        rendered with ${pkgs.map((p) => `${p.specifier.replace(/@[^/@]+(?=\/|$)/, "")} → ${p.version} (${p.provider})`).join(" · ")}
+        rendered with ${sources.map((p) => `${p.label} ${p.version} from ${p.provider}`).join(" · ")}
       </p>`;
   };
 };

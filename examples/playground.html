@@ -5,86 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>mport playground</title>
   <link rel="stylesheet" href="./shared.css">
-  <style>
-    .grid { display: grid; grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
-    @media (max-width: 52rem) { .grid { grid-template-columns: minmax(0, 1fr); } }
-    fieldset { border: 1px solid var(--line); border-radius: 8px; padding: .75rem; margin: 0 0 1rem; min-width: 0; }
-    legend { font-weight: 600; padding: 0 .25rem; }
-    label { display: block; }
-    .providers { display: grid; gap: .5rem; }
-    .prov { display: grid; grid-template-columns: auto 1fr auto; gap: .25rem .5rem; align-items: center; padding: .4rem .5rem; border: 1px solid var(--line); border-radius: 6px; }
-    .prov.down { border-color: var(--fail); background: color-mix(in srgb, var(--fail) 8%, transparent); }
-    .prov .name { font-weight: 600; }
-    .prov .build { color: var(--muted); font-size: 12px; }
-    .prov .controls { grid-column: 1 / -1; display: flex; gap: .75rem; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
-    .prov input[type=range] { width: 7rem; vertical-align: middle; }
-    textarea, select, input[type=text] { font: 13px ui-monospace, monospace; width: 100%; box-sizing: border-box; padding: .4rem; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--fg); }
-    textarea { min-height: 5.5rem; resize: vertical; }
-    .row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
-    .results { display: grid; gap: 1rem; }
-    .card { border: 1px solid var(--line); border-radius: 8px; padding: .75rem; min-width: 0; }
-    .card h3 { margin: 0 0 .25rem; font-size: 14px; font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
-    .card .meta { color: var(--muted); font-size: 13px; margin-bottom: .5rem; overflow-wrap: anywhere; }
-    .timeline { position: relative; border-left: 1px solid var(--line); margin: .25rem 0 0; }
-    .lane { display: grid; grid-template-columns: 7rem minmax(0, 1fr); align-items: center; height: 1.6rem; }
-    .lane .who { font: 12px ui-monospace, monospace; color: var(--muted); padding-right: .5rem; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .lane .track { position: relative; height: 1rem; background: color-mix(in srgb, var(--fg) 4%, transparent); border-radius: 3px; }
-    .bar { position: absolute; top: 0; bottom: 0; border-radius: 3px; min-width: 3px; }
-    .bar.ok { background: var(--ok); } .bar.fail { background: var(--fail); } .bar.aborted { background: var(--skip); opacity: .6; } .bar.pending { background: var(--muted); } .bar.resolved { background: var(--accent); }
-    .bar.selected { background: var(--accent); opacity: .5; min-width: 6px; }
-    .bar.skip { background: repeating-linear-gradient(45deg, var(--skip) 0 3px, transparent 3px 6px); width: 100% !important; left: 0 !important; opacity: .45; }
-    .bar span { position: absolute; left: calc(100% + 4px); top: -2px; font: 11px ui-monospace, monospace; color: var(--muted); white-space: nowrap; }
-    .skipreason { position: absolute; inset: 0 0 0 .5rem; font: 11px/1rem ui-monospace, monospace; color: var(--skip); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .axis { display: flex; justify-content: space-between; font: 11px ui-monospace, monospace; color: var(--muted); padding-left: 7rem; }
-    table { border-collapse: collapse; width: 100%; font: 13px ui-monospace, monospace; }
-    th, td { text-align: left; padding: .3rem .4rem; border-bottom: 1px solid var(--line); }
-    td.open { color: var(--fail); font-weight: 600; } td.closed { color: var(--ok); }
-    .tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--line); margin-bottom: .5rem; }
-    .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; }
-    .tabs button[aria-selected=true] { border-bottom-color: var(--accent); color: var(--accent); }
-    .error { color: var(--fail); white-space: pre-wrap; font: 13px ui-monospace, monospace; }
-    .hint { color: var(--muted); font-size: 13px; }
-    .scenarios { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: .6rem; margin: 0 0 1rem; }
-    .scenarios button { text-align: left; padding: .6rem .75rem; line-height: 1.35; display: grid; gap: .2rem; }
-    .scenarios button b { font-size: 14px; }
-    .scenarios button span { color: var(--muted); font-size: 12.5px; }
-    .scenarios button[aria-pressed=true] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
-    .scenario { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1rem; margin: 0 0 1.5rem; background: color-mix(in srgb, var(--accent) 5%, transparent); }
-    .scenario h2 { margin: 0 0 .35rem; }
-    .scenario .cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 1rem; }
-    @media (max-width: 52rem) { .scenario .cols { grid-template-columns: minmax(0, 1fr); } }
-    .scenario h3 { font-size: 13px; margin: .5rem 0 .25rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-    .scenario ul, .scenario ol { margin: 0; padding-left: 1.2rem; }
-    .scenario li { margin: .2rem 0; }
-    .checks { list-style: none; padding: 0 !important; }
-    .checks li { display: flex; gap: .5rem; align-items: baseline; }
-    .checks .mark { flex: none; font: 600 12px ui-monospace, monospace; padding: 0 .35rem; border-radius: 4px; }
-    .checks .mark.pass { color: var(--ok); } .checks .mark.fail { color: var(--fail); } .checks .mark.wait { color: var(--muted); }
-    .verdict { font-size: 13.5px; margin: .1rem 0 .4rem; padding: .35rem .5rem; border-radius: 6px; background: color-mix(in srgb, var(--fg) 5%, transparent); }
-    .verdict.good { border-left: 3px solid var(--ok); } .verdict.bad { border-left: 3px solid var(--fail); }
-    .legend { display: flex; flex-wrap: wrap; gap: .25rem .9rem; font-size: 12px; color: var(--muted); margin: 0 0 .5rem; }
-    .legend i { display: inline-block; width: .9rem; height: .6rem; border-radius: 2px; vertical-align: middle; margin-right: .3rem; }
-    h2.section { margin: 1.5rem 0 .25rem; font-size: 1.1rem; }
-  </style>
 </head>
 <body>
-<header class="top"><nav><a href="./index.html">mport examples</a> / <b>playground</b></nav></header>
+<header class="top"></header>
 <main>
   <h1>Routing playground</h1>
-  <p class="lead">mport decides <em>which exact version</em> of a package you get once, then lets <em>which CDN serves it</em> change when CDNs are slow, down or wrong. Pick a scenario: each one sets up the controls below, breaks something, and tells you what to look for. Registry lookups and CDN requests are real; outages, latency and tampered bytes are simulated with a <code>fetch</code> wrapper passed to <code>createRouter({ fetch })</code>.</p>
+  <p class="lead">mport routes your JavaScript imports across CDNs. It decides <em>which exact version</em> of a package you get once, then lets <em>which CDN serves it</em> change when CDNs are slow, down or wrong. Pick a scenario below: each one sets up the controls below, breaks something, and tells you what to look for. Registry lookups and CDN requests are real; outages, latency and tampered bytes are simulated with a <code>fetch</code> wrapper passed to <code>createRouter({ fetch })</code>.</p>
 
   <div class="scenarios" id="scenario-buttons"></div>
   <section class="scenario" id="scenario" hidden></section>
 
   <h2 class="section">Build your own</h2>
   <p class="hint">Every scenario is just these settings. Change anything and press Resolve.</p>
-  <div class="legend">
-    <span><i style="background:var(--accent)"></i>registry lookup (range → exact version)</span>
-    <span><i style="background:var(--ok)"></i>CDN answered</span>
-    <span><i style="background:var(--fail)"></i>CDN failed</span>
-    <span><i style="background:var(--skip);opacity:.6"></i>cancelled / lost the race</span>
-    <span><i style="background:repeating-linear-gradient(45deg,var(--skip) 0 3px,transparent 3px 6px)"></i>skipped without asking (reason shown)</span>
-  </div>
+  <div id="legend"></div>
 
   <div class="grid">
     <form id="config" autocomplete="off">
@@ -109,6 +42,7 @@ lit@^3</textarea>
           <label>target <select id="target"><option>browser</option><option>raw</option></select></label>
           <label>probe <select id="probe"><option>head</option><option>none</option></select></label>
           <label><input type="checkbox" id="jsrRoute" checked> <code>"@std/*": jsr()</code></label>
+          <label><input type="checkbox" id="litRoute"> <code>"lit*": jsDelivr()</code></label>
         </div>
       </fieldset>
 
@@ -156,8 +90,12 @@ lit@^3</textarea>
 
 <script type="module">
   import {
-    createRouter, esmSh, jsDelivr, unpkg, jspm, jsr, fallback, race, adaptive, weighted, prefer, verified,
+    createRouter, esmSh, jsDelivr, unpkg, jspm, jsr, fallback, race, adaptive, weighted, prefer, verified, MPortURL,
   } from "../src/index.mjs";
+  import { h, sleep, header, legend, healthRows, card } from "./ui.mjs";
+
+  header("playground.html");
+  document.querySelector("#legend").replaceWith(legend());
 
   const PROVIDERS = [
     { id: "esmSh", label: "esm.sh", make: () => esmSh(), host: "esm.sh", build: "esm.sh", weight: 3 },
@@ -165,21 +103,9 @@ lit@^3</textarea>
     { id: "unpkg", label: "unpkg", make: () => unpkg(), host: "unpkg.com", build: "npm", weight: 1 },
     { id: "jspm", label: "jspm", make: () => jspm(), host: "ga.jspm.io", build: "jspm", weight: 1 },
   ];
-  const state = Object.fromEntries(PROVIDERS.map((p) => [p.id, { on: p.id !== "jspm", down: false, latency: 0, tamper: false }]));
+  const state = Object.fromEntries(PROVIDERS.map((p) => [p.id, { on: p.id !== "jspm", down: false, latency: 0, tamper: false, breakImports: false }]));
 
   const $ = (s) => document.querySelector(s);
-  const h = (tag, attrs = {}, ...kids) => {
-    const el = document.createElement(tag);
-    for (const [k, v] of Object.entries(attrs)) {
-      if (k === "style" && typeof v === "object") Object.assign(el.style, v);
-      else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
-      else if (k in el) el[k] = v;
-      else el.setAttribute(k, v);
-    }
-    el.append(...kids.flat().filter((k) => k != null));
-    return el;
-  };
-
   // ---- provider controls -------------------------------------------------
   function renderProviders() {
     $("#providers").replaceChildren(...PROVIDERS.map((p) => {
@@ -191,6 +117,7 @@ lit@^3</textarea>
         h("div", { className: "controls" },
           h("label", {}, h("input", { type: "checkbox", checked: s.down, onchange: (e) => { s.down = e.target.checked; renderProviders(); } }), " simulate outage"),
           h("label", {}, h("input", { type: "checkbox", checked: s.tamper, onchange: (e) => { s.tamper = e.target.checked; } }), " tamper with bytes"),
+          h("label", { title: "answers mport's probe, but importing the module fails (router.import() only)" }, h("input", { type: "checkbox", checked: s.breakImports, onchange: (e) => { s.breakImports = e.target.checked; } }), " break imports"),
           h("label", {}, "+latency ", h("input", { type: "range", min: 0, max: 1500, step: 50, value: s.latency,
             oninput: (e) => { s.latency = +e.target.value; e.target.nextElementSibling.textContent = `${s.latency} ms`; } }),
             h("output", {}, `${s.latency} ms`)),
@@ -200,10 +127,6 @@ lit@^3</textarea>
   renderProviders();
 
   // A fetch that simulates outages and latency per CDN host.
-  const sleep = (ms, signal) => new Promise((res, rej) => {
-    const t = setTimeout(res, ms);
-    signal?.addEventListener("abort", () => { clearTimeout(t); rej(new DOMException("aborted", "AbortError")); }, { once: true });
-  });
   const simulatedFetch = async (url, init = {}) => {
     const host = new URL(url).host;
     const p = PROVIDERS.find((p) => p.host === host);
@@ -220,6 +143,13 @@ lit@^3</textarea>
     return fetch(url, init);
   };
 
+  // import() through the same simulation: an outage or "break imports" makes the import itself fail.
+  const simulatedImport = async (url) => {
+    const p = PROVIDERS.find((p) => p.host === new URL(url).host);
+    if (p && (state[p.id].down || state[p.id].breakImports)) throw new TypeError(`Failed to fetch dynamically imported module: ${url} (simulated)`);
+    return import(url);
+  };
+
   // ---- router construction -------------------------------------------------
   const enabled = () => PROVIDERS.filter((p) => state[p.id].on);
   let pinnedLock = false;
@@ -233,11 +163,11 @@ lit@^3</textarea>
       verified: `race(${names.map((n) => `verified(${n})`).join(", ")})`,
     }[$("#strategy").value];
     const used = ["esmSh", "jsDelivr", "unpkg", "jspm", "jsr", "fallback", "race", "adaptive", "prefer", "verified"]
-      .filter((name) => new RegExp(`\\b${name}\\(`).test(node) || (name === "jsr" && $("#jsrRoute").checked));
+      .filter((name) => new RegExp(`\\b${name}\\(`).test(node) || (name === "jsr" && $("#jsrRoute").checked) || (name === "jsDelivr" && $("#litRoute").checked));
     return `${pinnedLock ? 'import { readFile } from "node:fs/promises";\n' : ""}import { createRouter, ${used.join(", ")} } from "mport";
 
 const router = createRouter({
-  "*": ${node},${$("#jsrRoute").checked ? `\n  "@std/*": jsr(),` : ""}
+  "*": ${node},${$("#jsrRoute").checked ? `\n  "@std/*": jsr(),` : ""}${$("#litRoute").checked ? `\n  "lit*": jsDelivr(),` : ""}
 }, {
   probe: "${$("#probe").value}",
   target: "${$("#target").value}",
@@ -258,8 +188,10 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
     }[$("#strategy").value]();
     const routes = { "*": star };
     if ($("#jsrRoute").checked) routes["@std/*"] = jsr();
+    if ($("#litRoute").checked) routes["lit*"] = jsDelivr();
     return createRouter(routes, {
       fetch: simulatedFetch,
+      importer: simulatedImport,
       probe: $("#probe").value,
       target: $("#target").value,
       now: () => performance.now(),
@@ -270,100 +202,8 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
   }
   const specs = () => $("#specs").value.split("\n").map((s) => s.trim()).filter(Boolean);
 
-  // ---- rendering -------------------------------------------------------------
-  function timeline(trace, t0) {
-    const lanes = new Map();
-    const lane = (p) => lanes.get(p) ?? lanes.set(p, { bars: [], skips: [] }).get(p);
-    const open = new Map();
-    for (const e of trace) {
-      if (e.type === "probe" || e.type === "lookup") open.set(`${e.provider} ${e.url}`, e);
-      else if (e.type === "skip") lane(e.provider).skips.push(e.reason);
-      else if (e.cached) lane(e.provider).bars.push({ type: "ok", start: e.at - t0, end: e.at - t0, label: "cache hit" });
-      else {
-        const start = open.get(`${e.provider} ${e.url}`);
-        open.delete(`${e.provider} ${e.url}`);
-        const label = e.type === "resolved" ? `→ ${e.version} ${Math.round(e.ms ?? 0)}ms`
-          : e.type === "selected" ? "selected (probe: none)"
-          : e.reason ? `${e.type}: ${e.reason}` : `${e.type} ${Math.round(e.ms ?? 0)}ms`;
-        lane(e.provider).bars.push({ type: e.type, start: (start?.at ?? e.at) - t0, end: e.at - t0, label });
-      }
-    }
-    for (const [, e] of open) lane(e.provider).bars.push({ type: "pending", start: e.at - t0, end: performance.now() - t0, label: "…" });
-    const max = Math.max(50, ...[...lanes.values()].flatMap((l) => l.bars.map((b) => b.end)));
-    return h("div", {},
-      h("div", { className: "timeline" }, [...lanes].map(([who, l]) =>
-        h("div", { className: "lane" },
-          h("div", { className: "who", title: who }, who),
-          h("div", { className: "track" },
-            l.bars.length === 0 && l.skips.length ? h("div", { className: "bar skip", title: l.skips.join("; ") }) : null,
-            // only a lane's last bar gets a text label (earlier ones keep theirs in a tooltip), so labels never overlap
-            l.bars.map((b, i) => h("div", { className: `bar ${b.type}`, title: l.bars.map((x) => x.label).join(" → "),
-              style: { left: `${(b.start / max) * 80}%`, width: `${Math.max(0.5, ((b.end - b.start) / max) * 80)}%` } },
-              i === l.bars.length - 1 ? h("span", {}, l.bars.length > 1 ? l.bars.map((x) => x.label.split(" ")[0]).join(" → ") + (b.label.includes("ms") ? ` ${b.label.split(" ").at(-1)}` : "") : b.label) : null)),
-            l.skips.length && l.bars.length === 0 ? h("span", { className: "skipreason", title: l.skips.join("\n") }, `skipped: ${l.skips[0]}`) : null,
-          )))),
-      h("div", { className: "axis" }, h("span", {}, "0 ms"), h("span", {}, `${Math.round(max)} ms`)));
-  }
-
-  // One plain-English sentence per result, derived from the trace.
-  const short = (text = "") => text.replace(/^[^:]+: /, "").replace(/ \(use an ESM.*$/, "").replace(/^mport: /, "");
-  function verdict(spec, r, err) {
-    const trace = r?.trace ?? err?.trace ?? [];
-    const by = (type) => [...new Set(trace.filter((e) => e.type === type).map((e) => e.provider))].filter((p) => !/registry$/.test(p));
-    const skipped = trace.filter((e) => e.type === "skip");
-    const tampered = [...new Set(trace.filter((e) => e.type === "fail" && e.phase === "integrity").map((e) => e.provider))];
-    const failed = by("fail").filter((p) => !tampered.includes(p) || trace.some((e) => e.type === "fail" && e.provider === p && e.phase !== "integrity"));
-    const lost = trace.filter((e) => e.type === "aborted").map((e) => e.provider);
-    const why = (p) => short(skipped.find((e) => e.provider === p)?.reason);
-    const parts = [];
-    if (err) {
-      if (err.name === "ResolutionError") {
-        const cause = /may not exist|not found/.test(err.message) ? "the package may not exist, or the registry is unreachable" : /satisfies/.test(err.message) ? "no published version matches that range" : "the registry lookup failed";
-        return { good: false, text: `✗ Couldn't turn "${spec}" into an exact version: ${cause}. No CDN was asked.` };
-      }
-      const cjs = skipped.filter((e) => /CommonJS/.test(e.reason ?? ""));
-      if (cjs.length && cjs.length + failed.length >= (err.errors?.length ?? 0)) {
-        return { good: false, text: `✗ No CDN left can serve it. ${failed.length ? `${failed.join(", ")} failed; ` : ""}${cjs.map((e) => e.provider).join(" and ")} only serve raw files, and this package ships CommonJS, which browsers can't import.` };
-      }
-      return { good: false, text: `✗ Every CDN was ruled out: ${[...failed.map((p) => `${p} failed`), ...skipped.map((e) => `${e.provider} skipped (${short(e.reason)})`)].join("; ")}.` };
-    }
-    if (!r) return { good: false, text: "No route matched, so mport leaves this specifier to the browser." };
-    const pinned = !trace.some((e) => e.type === "lookup") && r.range && !/^\d+\.\d+\.\d+/.test(r.range);
-    if (pinned) parts.push(`version ${r.version} came from the lockfile, with no registry lookup`);
-    for (const e of skipped) parts.push(`${e.provider} skipped (${why(e.provider)})`);
-    if (failed.length) parts.push(`${failed.join(", ")} failed`);
-    if (tampered.length) parts.push(`${tampered.join(", ")} rejected: its bytes didn't match the lockfile's hash`);
-    if (lost.length) parts.push(`beat ${[...new Set(lost)].join(", ")} in a race`);
-    if (r.integrity) parts.push(`bytes verified (${r.integrity.slice(0, 14)}…)`);
-    const how = trace.some((e) => e.type === "selected") ? "picked (not checked, probe: none)" : "served";
-    return { good: true, text: `✓ ${how} by ${r.provider}${parts.length ? ": " + parts.join("; ") : ""}.` };
-  }
-
-  function card(spec, r, err, t0) {
-    const trace = r?.trace ?? err?.trace ?? [];
-    const v = verdict(spec, r, err);
-    const meta = r
-      ? `${r.version ? `v${r.version} · ` : ""}${r.provider} (${r.build})${r.cached ? " · cached" : ""}${r.integrity ? ` · ${r.integrity.slice(0, 22)}…` : ""}`
-      : null;
-    return h("div", { className: "card" },
-      h("h3", {}, spec),
-      h("div", { className: `verdict ${v.good ? "good" : "bad"}` }, v.text),
-      r ? h("div", { className: "meta" }, meta, h("br"), h("a", { href: r.base ?? r.url, target: "_blank", rel: "noopener" }, r.base ?? r.url)) : null,
-      r === null ? h("div", { className: "meta" }, "no route matched — left to the browser") : null,
-      err ? h("div", { className: "error" }, `${err.name}: ${err.message}${err.errors ? "\n" + err.errors.map((e) => `  · ${e.message}`).join("\n") : ""}`) : null,
-      trace.length ? timeline(trace, t0) : null);
-  }
-
-  function renderHealth(router) {
-    const snap = router.health.snapshot();
-    const rows = Object.entries(snap);
-    const now = performance.now();
-    $("#health").replaceChildren(...(rows.length ? rows.map(([name, s]) =>
-      h("tr", {}, h("td", {}, name), h("td", {}, s.ok), h("td", {}, s.fail),
-        h("td", {}, s.latency != null ? `${Math.round(s.latency)} ms` : "—"),
-        h("td", { className: s.healthy ? "closed" : "open" }, s.healthy ? "closed" : `open · ${Math.ceil((s.openUntil - now) / 1000)}s`)))
-      : [h("tr", {}, h("td", { colSpan: 5, className: "hint" }, "No requests yet."))]));
-  }
+  // ---- rendering (timeline, verdicts and cards live in ui.mjs) ---------------
+  const renderHealth = (router) => $("#health").replaceChildren(...healthRows(router.health.snapshot()));
 
   let router, outputs = { map: "", lock: "", code: "" }, tab = "map";
   const setOutput = () => { $("#output").textContent = outputs[tab] || "Run a resolution to see the output."; };
@@ -409,7 +249,8 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
   // ---- scenarios --------------------------------------------------------------
   const ALL_UP = { esmSh: {}, jsDelivr: {}, unpkg: {}, jspm: { on: false } };
   function apply(settings) {
-    const s = { specs: ["react@^19", "preact@^10/hooks", "lit@^3"], strategy: "fallback", target: "browser", probe: "head", jsrRoute: true, cb: [2, 15], pin: true, providers: ALL_UP, ...settings };
+    const s = { specs: ["react@^19", "preact@^10/hooks", "lit@^3"], strategy: "fallback", target: "browser", probe: "head", jsrRoute: true, litRoute: false, cb: [2, 15], pin: true, providers: ALL_UP, ...settings };
+    $("#litRoute").checked = s.litRoute;
     $("#specs").value = s.specs.join("\n");
     $("#strategy").value = s.strategy;
     $("#target").value = s.target;
@@ -417,7 +258,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
     $("#jsrRoute").checked = s.jsrRoute;
     [$("#cbFailures").value, $("#cbReset").value] = s.cb;
     $("#pin").checked = s.pin;
-    for (const p of PROVIDERS) Object.assign(state[p.id], { on: true, down: false, latency: 0, tamper: false }, s.providers[p.id] ?? { on: false });
+    for (const p of PROVIDERS) Object.assign(state[p.id], { on: true, down: false, latency: 0, tamper: false, breakImports: false }, s.providers[p.id] ?? { on: false });
     renderProviders();
   }
   const served = (res, spec) => res?.get(spec)?.r?.provider;
@@ -426,7 +267,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
 
   const SCENARIOS = [
     {
-      id: "normal", title: "Everything's up", blurb: "The baseline: what a normal resolution looks like.",
+      id: "normal", code: "const router = createRouter({ \"*\": [esmSh(), jsDelivr(), unpkg()] }); // array = fallback: try in order\nconst { importMap, lock } = await router.build([\"react@^19\", \"preact@^10/hooks\", \"lit@^3\"]);", title: "Everything's up", blurb: "The baseline: what a normal resolution looks like.",
       what: "All CDNs are healthy. The router tries them in order (fallback): esm.sh, then jsDelivr, then unpkg.",
       notice: [
         "Each package starts with a registry lookup (blue): the range, e.g. <code>^19</code>, becomes an exact version.",
@@ -440,7 +281,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
       ],
     },
     {
-      id: "outage", title: "A CDN goes down", blurb: "esm.sh is unreachable. Who takes over?",
+      id: "outage", code: "// same router; esm.sh is unreachable\nconst router = createRouter({ \"*\": [esmSh(), jsDelivr(), unpkg()] });\nawait router.resolve(\"preact@^10/hooks\"); // \u2192 jsDelivr (Preact ships ES modules)\nawait router.resolve(\"react@^19\");        // \u2717 RoutingError: React ships only CommonJS\n// opt out of the CommonJS check: createRouter(routes, { allowCommonJS: true })", title: "A CDN goes down", blurb: "esm.sh is unreachable. Who takes over?",
       what: "esm.sh is down, so the router falls through to the next CDN. But jsDelivr and unpkg serve package files exactly as published, while esm.sh converts them to browser-ready ES modules.",
       notice: [
         "<b>preact/hooks</b> and <b>lit</b> are fine: they publish ES modules, so jsDelivr can serve them as-is.",
@@ -454,7 +295,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
       ],
     },
     {
-      id: "race", title: "Race: fastest wins", blurb: "Ask every CDN at once; use whichever answers first.",
+      id: "race", code: "const router = createRouter({ \"*\": race(esmSh(), jsDelivr(), unpkg()) });\nconst r = await router.resolve(\"lit@^3\");\nr.provider; // the first CDN to answer; the others are cancelled (r.trace shows it)", title: "Race: fastest wins", blurb: "Ask every CDN at once; use whichever answers first.",
       what: "The strategy is <code>race()</code>: all CDNs are asked at the same time. jsDelivr gets +900 ms of simulated latency and unpkg +500 ms, so esm.sh should win.",
       notice: [
         "All three CDN bars start at the same moment.",
@@ -471,7 +312,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
       ],
     },
     {
-      id: "breaker", title: "Circuit breaker", blurb: "Stop asking a CDN that keeps failing.",
+      id: "breaker", code: "const router = createRouter({ \"*\": [esmSh(), jsDelivr(), unpkg()] }, {\n  circuitBreaker: { failures: 2, reset: \"10s\" }, // skip a CDN after 2 failures in a row, for 10 s\n});\nrouter.health.snapshot(); // per-CDN ok / fail / latency / circuit state", title: "Circuit breaker", blurb: "Stop asking a CDN that keeps failing.",
       what: "esm.sh is down. The circuit breaker opens after 2 failures in a row and stays open for 10 seconds. The scenario resolves three times with the same router health.",
       notice: [
         "Runs 1 and 2: esm.sh is asked, fails, and the router moves on to jsDelivr.",
@@ -489,7 +330,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
       ],
     },
     {
-      id: "pinning", title: "Same version, different mirror", blurb: "A lockfile keeps the exact version and build.",
+      id: "pinning", code: "const first = createRouter({ \"*\": [jsDelivr(), unpkg()] });\nconst { lock } = await first.build([\"preact@^10/hooks\", \"lit@^3\"]); // save as mport.lock.json\n\nconst next = createRouter({ \"*\": [esmSh(), jsDelivr(), unpkg()] }, { lock });\nawait next.resolve(\"lit@^3\"); // same version, no registry lookup; only same-build mirrors may serve it", title: "Same version, different mirror", blurb: "A lockfile keeps the exact version and build.",
       what: "Run 1 resolves with esm.sh switched off, so jsDelivr serves the raw npm files and the lockfile records version + build. Then jsDelivr goes down, esm.sh comes back, and run 2 reuses that lockfile.",
       notice: [
         "Run 2 does no registry lookup: the version comes from the lockfile.",
@@ -509,7 +350,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
       ],
     },
     {
-      id: "prefer", title: "Pick by capability", blurb: "Browser-ready code or raw files, per request.",
+      id: "prefer", code: "const router = createRouter({ \"*\": prefer({ browser: esmSh(), raw: fallback(jsDelivr(), unpkg()) }) });\nawait router.resolve(\"lit@^3\", { target: \"browser\" }); // \u2192 esm.sh\nawait router.resolve(\"lit@^3\", { target: \"raw\" });     // \u2192 jsDelivr", title: "Pick by capability", blurb: "Browser-ready code or raw files, per request.",
       what: "<code>prefer({ browser: esmSh(), raw: fallback(jsDelivr(), unpkg()) })</code> chooses a CDN by what the caller needs. The scenario resolves once with target \"browser\" and once with target \"raw\".",
       notice: [
         "Target \"browser\" goes to esm.sh (converted, ready to import).",
@@ -528,7 +369,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
       ],
     },
     {
-      id: "integrity", title: "Tampered mirror", blurb: "Reject a CDN that serves different bytes.",
+      id: "integrity", code: "const router = createRouter({ \"*\": race(verified(jsDelivr()), verified(unpkg())) }, { lock });\nconst r = await router.resolve(\"lit@^3\"); // a mirror whose bytes don't match lock's hash is rejected\nr.integrity;                              // \"sha384-\u2026\", also emitted in the import map's \"integrity\"", title: "Tampered mirror", blurb: "Reject a CDN that serves different bytes.",
       what: "Run 1 records each file's SRI hash in the lockfile (esm.sh off; jsDelivr and unpkg race, each wrapped in <code>verified()</code>). Then jsDelivr starts serving tampered bytes, and is made the fastest.",
       notice: [
         "Run 2: jsDelivr answers first, but its bytes don't match the hash in the lockfile, so it's rejected (red, \"integrity\").",
@@ -547,7 +388,63 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
         ["unpkg's genuine file was used, with the recorded hash", served(b, "lit@^3") === "unpkg" && b.get("lit@^3").r.integrity === a.get("lit@^3").r.integrity],
       ],
     },
+    {
+      id: "namespace", code: "const router = createRouter({\n  \"*\": esmSh(),          // everything else\n  \"@std/*\": jsr(),       // the Deno standard library comes from JSR\n  \"lit*\": jsDelivr(),    // Lit's raw files from jsDelivr\n});\nconst { importMap, lock } = await router.build([\"preact@^10\", \"@std/path@^1\", \"lit@^3/\"]);\n// <script type=\"importmap\">{ \"imports\": { \"preact\": \u2026, \"@std/path\": \u2026, \"lit/\": \u2026 } }<\/script>", title: "Route by package name", blurb: "Different packages from different places, compiled to an import map.",
+      what: "Routes are matched by package name, most specific first: <code>@std/*</code> goes to JSR, <code>lit*</code> to jsDelivr, and everything else to esm.sh. The result compiles to a standard import map and a lockfile (see the tabs under the results).",
+      notice: [
+        "<b>@std/path</b> is a JSR package: the lookup goes to the JSR registry, and the lockfile entry says <code>\"registry\": \"jsr\"</code>.",
+        "<b>lit/</b> ends in <code>/</code>, so the import map gets a <em>prefix</em> mapping: <code>import \"lit/decorators.js\"</code> works too.",
+        "The import map is all a browser needs; mport isn't involved when the page imports.",
+      ],
+      async steps(ctx) {
+        apply({ specs: ["preact@^10", "@std/path@^1", "lit@^3/"], litRoute: true });
+        ctx.runs.push(await ctx.run("Resolve three packages from three places"));
+        ctx.showTab("map");
+      },
+      checks: ({ runs: [a] }) => [
+        ["preact → esm.sh (the catch-all route)", served(a, "preact@^10") === "esm.sh"],
+        ["@std/path → JSR, recorded with registry \"jsr\"", served(a, "@std/path@^1") === "jsr" && a.get("@std/path@^1").r.registry === "jsr"],
+        ["lit/ → jsDelivr, as a prefix mapping", served(a, "lit@^3/") === "jsdelivr" && a.get("lit@^3/").r.key === "lit/"],
+      ],
+    },
+    {
+      id: "runtime", code: "const router = createRouter({ \"*\": [esmSh(), jsDelivr(), unpkg()] });\nconst { nanoid } = await router.import(\"nanoid@^5\", { onEvent: console.log });\n// If the chosen URL fails to import, that CDN is excluded and the next one is used.\nnanoid();", title: "Retry at import time", blurb: "A CDN answers the check, then the import fails.",
+      what: "<code>router.import()</code> resolves <em>and</em> imports. Here esm.sh answers mport's availability check but the import itself fails (\"break imports\"), which an import map can't recover from: the browser has no fallback hook. <code>router.import()</code> can.",
+      notice: [
+        "esm.sh is chosen first (its probe succeeds), then the import fails (red, \"import\").",
+        "esm.sh is excluded for this import and the next CDN, jsDelivr, is used.",
+        "The module really runs: the step shows an id generated by the imported <code>nanoid()</code>.",
+      ],
+      async steps(ctx) {
+        apply({ specs: ["nanoid@^5"], providers: { ...ALL_UP, esmSh: { breakImports: true } } });
+        ctx.runs.push(await ctx.importRun("nanoid@^5", (mod) => `nanoid() → ${mod.nanoid()}`));
+      },
+      checks: ({ runs: [a] }) => [
+        ["esm.sh's import failed at runtime", a.events.some((e) => e.type === "fail" && e.phase === "import" && e.provider === "esm.sh")],
+        ["jsDelivr served it and the module ran", a.provider === "jsdelivr" && typeof a.module?.nanoid === "function"],
+      ],
+    },
+    {
+      id: "v1", code: "import { MPortURL } from \"mport\"; // the 1.x API, unchanged\nconst [module, url, info] = await MPortURL()(\"lodash-es@4.17.21/lodash.js\");\n// races jsDelivr, JSPM and unpkg; info is new in 2.0: provider, trace, \u2026", title: "The 1.x API", blurb: "Old code keeps working, on the same router.",
+      what: "<code>MPortURL()</code> is mport 1.x's API, unchanged: it races jsDelivr, JSPM and unpkg at runtime and imports from whichever answers first. In 2.0 it's a thin layer over the router, so it returns a trace too. (This scenario uses the real network, not the simulated outages.)",
+      notice: [
+        "All three origins are raced; the winner is imported and the rest are reported as losing the race.",
+        "The call returns <code>[module, url, info]</code>. <code>[module, url]</code> destructuring from 1.x still works.",
+        "See the Compatibility page for the full 1.x checklist, including the Firefox entry point.",
+      ],
+      async steps(ctx) {
+        apply({ specs: ["lodash-es@4.17.21/lodash.js"] });
+        ctx.runs.push(await ctx.v1Run("lodash-es@4.17.21/lodash.js", (mod) => `_.chunk([1,2,3,4], 2) → ${JSON.stringify(mod.default.chunk([1, 2, 3, 4], 2))}`));
+      },
+      checks: ({ runs: [a] }) => [
+        ["MPortURL returned [module, url, info]", typeof a.module?.default?.chunk === "function" && typeof a.url === "string" && Array.isArray(a.info?.trace)],
+        ["All three 1.x origins were raced", new Set(a.info.trace.filter((e) => e.type === "probe").map((e) => e.provider)).size === 3],
+      ],
+    },
   ];
+  // learning order
+  const ORDER = ["normal", "namespace", "outage", "runtime", "race", "breaker", "pinning", "prefer", "integrity", "v1"];
+  SCENARIOS.sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
 
   let active = null;
   const renderScenarioButtons = () => $("#scenario-buttons").replaceChildren(...SCENARIOS.map((sc) =>
@@ -563,6 +460,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
     box.replaceChildren(
       h("h2", {}, sc.title),
       h("p", { innerHTML: sc.what }),
+      h("details", { className: "code" }, h("summary", {}, "Show code"), h("pre", {}, h("code", {}, sc.code))),
       h("div", { className: "cols" },
         h("div", {}, h("h3", {}, "What to notice"), h("ul", {}, sc.notice.map((n) => h("li", { innerHTML: n })))),
         h("div", {}, h("h3", {}, "Steps"), steps, h("h3", {}, "Did it happen?"), checks)));
@@ -576,6 +474,34 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
         const summary = [...res].map(([spec, { r }]) => `${spec} → ${r?.provider ?? "✗"}`).join(", ");
         li.textContent = `${label}: ${summary}`;
         return res;
+      },
+      showTab(name) { document.querySelector(`[data-tab="${name}"]`)?.click(); },
+      /** router.import(): resolve + import, with runtime failover. */
+      async importRun(spec, describeModule) {
+        const li = h("li", {}, `router.import("${spec}") …`);
+        steps.append(li);
+        router = makeRouter();
+        const events = [];
+        const t0 = performance.now();
+        let module, error;
+        try { module = await router.import(spec, { onEvent: (e) => events.push(e) }); } catch (e) { error = e; }
+        const last = [...events].reverse().find((e) => e.type === "ok" || e.type === "selected");
+        const r = error ? null : { provider: last?.provider, url: last?.url, version: events.find((e) => e.type === "resolved")?.version, build: "", trace: events };
+        $("#cards").replaceChildren(card(`${spec}  (router.import)`, r, error && Object.assign(error, { trace: events }), t0));
+        renderHealth(router);
+        li.textContent = error ? `router.import("${spec}") failed: ${error.message}` : `router.import("${spec}") → ${r.provider}; ${describeModule(module)}`;
+        return { events, module, provider: r?.provider, error };
+      },
+      /** mport 1.x: MPortURL()(spec) → [module, url, info] (real network). */
+      async v1Run(spec, describeModule) {
+        const li = h("li", {}, `MPortURL()("${spec}") …`);
+        steps.append(li);
+        const [module, url, info] = await MPortURL()(spec);
+        await sleep(1600); // the losing imports finish and are traced as having lost the race
+        const t0 = Math.min(...info.trace.map((e) => e.at));
+        $("#cards").replaceChildren(card(`${spec}  (MPortURL)`, { ...info, build: "", trace: info.trace }, null, t0));
+        li.textContent = `MPortURL()("${spec}") → ${url}; ${describeModule(module)}`;
+        return { module, url, info };
       },
     };
     checks.append(h("li", {}, h("span", { className: "mark wait" }, "…"), "running"));

@@ -332,3 +332,17 @@ test("lockfile keys are the specifier as written; the entry says which registry 
   const pinned = createRouter({ "*": esmSh(), "@std/*": jsr() }, { probe: "none", fetch: fakeFetch(registryFixtures), lock });
   assert.equal((await pinned.resolve("@std/path@^1")).version, "1.1.0");
 });
+
+test("router.import() fails over across builds unless a lock or opts.build pins one", async () => {
+  const importer = async (url) => {
+    if (url.startsWith("https://esm.sh/")) throw new TypeError("Failed to fetch dynamically imported module");
+    return { default: url };
+  };
+  const routes = () => ({ "*": [esmSh(), jsDelivr({ esm: true })] });
+  const free = createRouter(routes(), { fetch: fakeFetch(registryFixtures), probe: "none", importer });
+  assert.equal((await free.import("react@19.2.0")).default, "https://cdn.jsdelivr.net/npm/react@19.2.0/+esm");
+  const pinned = createRouter(routes(), { fetch: fakeFetch(registryFixtures), probe: "none", importer });
+  await assert.rejects(pinned.import("react@19.2.0", { build: "esm.sh" }), /could not import|no provider/);
+  const locked = createRouter(routes(), { fetch: fakeFetch(registryFixtures), probe: "none", importer, lock: { packages: { "react@19.2.0": { version: "19.2.0", build: "esm.sh" } } } });
+  await assert.rejects(locked.import("react@19.2.0"), /could not import|no provider/);
+});

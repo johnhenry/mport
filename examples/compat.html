@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mport compatibility</title>
+  <link rel="stylesheet" href="./shared.css">
+  <style>
+    table.compat { border-collapse: collapse; width: 100%; font-size: 14px; }
+    table.compat th, table.compat td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    table.compat td.res { font: 12.5px ui-monospace, monospace; white-space: nowrap; }
+    table.compat td.res.pass { color: var(--ok); } table.compat td.res.fail { color: var(--fail); } table.compat td.res.wait { color: var(--muted); }
+    table.compat .detail { display: block; color: var(--muted); font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
+    .summary { font-weight: 600; margin: .5rem 0 1rem; }
+    .traces { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 1rem; margin-top: 1rem; }
+    .table-wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+<header class="top"></header>
+<main>
+  <h1>1.x compatibility</h1>
+  <p class="lead">mport 2.0 keeps the 1.x API (<code>mport()</code>, <code>MPort()</code>, <code>MPortURL()</code>) working unchanged, as a thin layer over the router. This page runs the 1.x calls against the real CDNs through both entry points: the standard one, and <code>mport/firefox</code>, which older Firefox needs because it rejects two-argument <code>import()</code> at parse time.</p>
+  <p class="summary" id="summary">running…</p>
+  <div class="table-wrap"><table class="compat"><thead><tr><th>1.x guarantee</th><th>mport</th><th>mport/firefox</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <h2 style="margin-top:1.5rem">What <code>MPortURL()</code> did</h2>
+  <p class="hint">The same race, traced, through each entry point. New in 2.0: the third element, <code>info</code>, carries this trace; <code>[module, url]</code> destructuring from 1.x is unaffected.</p>
+  <div id="legend"></div>
+  <div class="traces" id="traces"></div>
+</main>
+<script type="module">
+  import * as standard from "../src/index.mjs";
+  import * as firefox from "../src/firefox.mjs";
+  import { h, header, legend, card, sleep } from "./ui.mjs";
+
+  header("compat.html");
+  document.querySelector("#legend").replaceWith(legend());
+
+  const LODASH = "lodash-es@4.17.21/lodash.js";
+  const CHECKS = [
+    ["mport(spec) imports a module (default export: the 1.x one-liner)", async (api) => {
+      const { default: _ } = await api.mport(LODASH);
+      return [typeof _.chunk === "function", `_.chunk([1,2,3,4], 2) → ${JSON.stringify(_.chunk([1, 2, 3, 4], 2))}`];
+    }],
+    ["MPort({ cdns }) uses only the listed origins", async (api) => {
+      const [, url] = await api.MPortURL({ cdns: ["unpkg.com/"] })(LODASH);
+      const mod = await api.MPort({ cdns: ["unpkg.com/"] })(LODASH);
+      return [url.startsWith("https://unpkg.com/") && typeof mod.default.sum === "function", url];
+    }],
+    ["MPortURL(...origins) honours origin arguments (1.x silently ignored them)", async (api) => {
+      const [, url] = await api.MPortURL("cdn.jsdelivr.net/npm/")(LODASH);
+      return [url.startsWith("https://cdn.jsdelivr.net/npm/"), url];
+    }],
+    ["MPortURL()(spec) returns [module, url], plus info in 2.0", async (api) => {
+      const [module, url, info] = await api.MPortURL()(LODASH);
+      return [typeof module.default.chunk === "function" && typeof url === "string" && Array.isArray(info?.trace), `winner ${url}`];
+    }],
+    ["The { name, version, path } object form works", async (api) => {
+      const [, url] = await api.MPortURL()({ name: "lodash-es", version: "4.17.21", path: "lodash.js" });
+      return [/lodash-es@4\.17\.21\/lodash\.js$/.test(url), url];
+    }],
+    ["A spec without a path imports the package's entry (from package.json)", async (api) => {
+      const [module, url, info] = await api.MPortURL()("lodash-es@4.17.21");
+      return [typeof module.default.chunk === "function" && url.endsWith("/lodash.js"), `entry ${info.entry} → ${url}`];
+    }],
+    ["Scoped packages work in string form (1.x mis-parsed them)", async (api) => {
+      const [module, url] = await api.MPortURL()("@preact/signals-core@1.8.0/dist/signals-core.module.js");
+      return [typeof module.signal === "function" && url.includes("@preact/signals-core@1.8.0"), url];
+    }],
+    ["useCache: \"localhost\" reuses the winning URL (1.x never matched)", async (api, name) => {
+      const key = `mport-compat-${name}`;
+      try { localStorage.removeItem(key); } catch {}
+      const m = api.MPortURL({ useCache: "localhost", cacheKey: key });
+      const [, first] = await m(LODASH);
+      const [, second, info] = await m(LODASH);
+      return [info.cached === true && first === second, `second call: cached, ${second}`];
+    }],
+    ["Its source never uses two-argument import()", async (api, name) => {
+      const entry = name === "firefox" ? "../src/firefox.mjs" : null;
+      if (!entry) return [null, "not required: the standard entry may use import(url, options)"];
+      const seen = new Set();
+      const offenders = [];
+      const visit = async (url) => {
+        if (seen.has(url)) return;
+        seen.add(url);
+        const code = (await (await fetch(url)).text()).replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+        if (/(?<![.\w$])import\s*\([^()]*,/.test(code)) offenders.push(url.split("/").pop());
+        for (const [, dep] of code.matchAll(/from\s+"(\.\/[^"]+)"/g)) await visit(new URL(dep, url).href);
+      };
+      await visit(new URL(entry, location.href).href);
+      return [offenders.length === 0, offenders.length ? `found in ${offenders.join(", ")}` : `${seen.size} modules checked`];
+    }],
+  ];
+
+  const tbody = document.querySelector("#rows");
+  const cell = () => h("td", { className: "res wait" }, "…");
+  const rows = CHECKS.map(([label]) => {
+    const cells = [cell(), cell()];
+    tbody.append(h("tr", {}, h("td", {}, label), ...cells));
+    return cells;
+  });
+  const show = (td, [ok, detail]) => {
+    td.className = `res ${ok === null ? "wait" : ok ? "pass" : "fail"}`;
+    td.replaceChildren(ok === null ? "n/a" : ok ? "pass" : "fail", h("span", { className: "detail" }, detail));
+    return ok;
+  };
+
+  let passed = 0, failed = 0;
+  for (const [i, [, run]] of CHECKS.entries()) {
+    for (const [col, [name, api]] of [["standard", standard], ["firefox", firefox]].entries()) {
+      try {
+        const ok = show(rows[i][col], await run(api, name));
+        if (ok === true) passed++; else if (ok === false) failed++;
+      } catch (e) {
+        show(rows[i][col], [false, `${e.name}: ${e.message}`]);
+        failed++;
+      }
+    }
+  }
+  const summary = document.querySelector("#summary");
+  summary.textContent = failed ? `✗ ${failed} check${failed > 1 ? "s" : ""} failed, ${passed} passed` : `✓ all ${passed} checks passed on both entry points`;
+  summary.className = `summary ${failed ? "fail" : "ok"}`;
+
+  // Traces: one MPortURL race per entry point.
+  for (const [name, api] of [["mport", standard], ["mport/firefox", firefox]]) {
+    const [, , info] = await api.MPortURL()(LODASH);
+    await sleep(1500);
+    document.querySelector("#traces").append(card(`${name}: MPortURL()("${LODASH}")`, { ...info, build: "", trace: info.trace }, null, Math.min(...info.trace.map((e) => e.at))));
+  }
+</script>
+</body>
+</html>

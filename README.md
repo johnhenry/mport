@@ -253,7 +253,8 @@ const router = createRouter({ "*": [esmSh(), jsDelivr()] });
 await startup(router, ["react@^19", "react-dom@^19/"]);
 const React = await import("react");
 
-// B: import through the router every time, failing over to other mirrors
+// B: import through the router every time; if an import fails, that CDN is excluded
+//    and the next one is tried (restricted to one build only when a lockfile pins it)
 const load = createImporter(router);
 const { default: dayjs } = await load("dayjs@1");
 ```
@@ -338,14 +339,15 @@ The default race still mixes builds (raw jsDelivr/unpkg files against jspm's tra
 npm run demo:html   # then open http://localhost:8712/examples/
 ```
 
-| Page | What it shows |
-|---|---|
-| `examples/playground.html` | Guided scenarios: everything up, a CDN outage (and why React can't fall back to raw CDNs), a race, the circuit breaker, lockfile pinning to a different mirror, choosing by capability, and a tampered mirror rejected by `verified()`. Each explains what to notice, verifies it happened, and gives every result a plain-English verdict. The controls underneath build any other router. |
-| `examples/router.html` | A guided tour: the v1 race with debug info, a fallback past a dead mirror, routing by package name compiled to an import map, and runtime failover with `router.import()` |
-| `examples/startup.html` | `startup()` injects an import map, then a Preact + htm app loads through plain `import "preact"` |
-| `examples/demo.html`, `examples/demo.firefox.html` | The unchanged 1.x API, through the standard and Firefox entry points, with results on the page |
+Three pages share one header, one timeline and one way of explaining results (`examples/ui.mjs`):
 
-These pages talk to the real CDNs and registries.
+| Page | What it's for |
+|---|---|
+| `examples/playground.html` | **Learn.** Ten one-click scenarios: everything up; routing by package name (to an import map and lockfile); a CDN outage (and why React can't fall back to raw CDNs); retrying at import time with `router.import()`; a race; the circuit breaker; lockfile pinning to a different mirror; choosing by capability; a tampered mirror rejected by `verified()`; and the 1.x API. Each explains what to notice, checks that it happened, shows its code, and gives every result a plain-English verdict. The controls underneath build any other router. |
+| `examples/app.html` | **Use it.** A Preact + htm app wired two ways, resolved once into an injected import map, or loaded through `router.import()`, with esm.sh up, down, or answering but failing to import. Shows why an import map can't fall back at runtime and `router.import()` can. |
+| `examples/compat.html` | **Check it.** The 1.x API run through both `mport` and `mport/firefox` against the real CDNs, as a pass/fail table, including a scan proving the Firefox entry never uses two-argument `import()`. |
+
+The pages talk to the real CDNs and registries; outages, latency and tampering are simulated with `fetch`/`importer` wrappers. `npm run demo` / `npm run demo:firefox` run the 1.x calls under Deno and print the results.
 
 ## License
 

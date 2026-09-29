@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mport app</title>
+  <link rel="stylesheet" href="./shared.css">
+  <style>
+    .modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .75rem; margin: 0 0 1rem; }
+    .modes a { display: block; border: 1px solid var(--line); border-radius: 8px; padding: .75rem; color: inherit; text-decoration: none; }
+    .modes a[aria-current=true] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+    .modes b { display: block; margin-bottom: .2rem; }
+    .modes span { color: var(--muted); font-size: 13.5px; }
+    .switch { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: 0 0 1.25rem; font-size: 14px; }
+    .switch a { padding: .25rem .6rem; border: 1px solid var(--line); border-radius: 6px; text-decoration: none; color: var(--fg); font-size: 13px; }
+    .switch a[aria-current=true] { border-color: var(--accent); color: var(--accent); }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
+    @media (max-width: 52rem) { .layout { grid-template-columns: minmax(0, 1fr); } }
+    #app { border: 1px solid var(--line); border-radius: 8px; padding: 1rem; min-height: 8rem; }
+    .todo { display: flex; gap: .5rem; align-items: center; padding: .25rem 0; }
+    .todo.done span { text-decoration: line-through; color: var(--muted); }
+    #app input[type=text] { font: inherit; padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--fg); min-width: 0; flex: 1; }
+    #app form { display: flex; gap: .5rem; margin-bottom: .75rem; }
+    .status { font: 13px ui-monospace, monospace; color: var(--muted); }
+    .outcome { padding: .6rem .8rem; border-radius: 8px; margin: 0 0 1rem; font-size: 14px; }
+    .outcome.good { border-left: 3px solid var(--ok); background: color-mix(in srgb, var(--ok) 8%, transparent); }
+    .outcome.bad { border-left: 3px solid var(--fail); background: color-mix(in srgb, var(--fail) 8%, transparent); }
+    #cards { display: grid; gap: .75rem; }
+  </style>
+</head>
+<body>
+<header class="top"></header>
+<main>
+  <h1>Using mport in an app</h1>
+  <p class="lead">A small Preact + htm app whose dependencies are routed by mport. There are two ways to wire it in, and they behave differently when a CDN misbehaves. Pick a mode, then change esm.sh's state: the page reloads, because an import map can only be installed before modules load.</p>
+
+  <div class="modes" id="modes"></div>
+  <div class="switch" id="switch"></div>
+  <div class="outcome" id="outcome" hidden></div>
+
+  <div class="layout">
+    <section>
+      <h2>The app</h2>
+      <div id="app"><p class="status">loading…</p></div>
+      <details class="code"><summary>Show code</summary><pre><code id="code"></code></pre></details>
+    </section>
+    <section>
+      <h2>How its dependencies were routed</h2>
+      <div id="legend"></div>
+      <div id="cards"></div>
+      <h2 style="margin-top:1rem">Import map</h2>
+      <pre id="map">…</pre>
+    </section>
+  </div>
+</main>
+<script type="module">
+  import { createRouter, esmSh, jsDelivr, injectImportMap, compileImportMap } from "../src/index.mjs";
+  import { h, header, legend, card } from "./ui.mjs";
+
+  header("app.html");
+  document.querySelector("#legend").replaceWith(legend());
+  const $ = (s) => document.querySelector(s);
+
+  const params = new URLSearchParams(location.search);
+  const mode = params.get("mode") === "runtime" ? "runtime" : "startup";
+  const esm = ["up", "down", "breaks"].includes(params.get("esm")) ? params.get("esm") : "up";
+  const SPECS = ["preact@^10", "preact@^10/hooks", "htm@^3"];
+  const link = (m, e) => `?mode=${m}&esm=${e}`;
+
+  $("#modes").replaceChildren(
+    h("a", { href: link("startup", esm), "aria-current": String(mode === "startup") }, h("b", {}, "Resolve once, at startup"),
+      h("span", {}, "Resolve every package, inject a standard import map, then the app uses plain import \"preact\". Fast and native, but once the map is installed the browser can't fall back.")),
+    h("a", { href: link("runtime", esm), "aria-current": String(mode === "runtime") }, h("b", {}, "Import through the router"),
+      h("span", {}, "The app loads each dependency with router.import(). If an import fails, that CDN is excluded and the next one is tried.")));
+  $("#switch").replaceChildren(h("span", {}, "esm.sh is"),
+    ...[["up", "up"], ["down", "down (unreachable)"], ["breaks", "up, but its modules fail to import"]].map(([k, label]) =>
+      h("a", { href: link(mode, k), "aria-current": String(esm === k) }, label)));
+
+  // Simulate esm.sh's state for mport's requests and for imports made through the router.
+  const isEsm = (url) => new URL(url).host === "esm.sh";
+  const fetchSim = (url, init) => (esm === "down" && isEsm(url) ? Promise.reject(new TypeError("simulated outage: esm.sh")) : fetch(url, init));
+  const importSim = (url) => (esm !== "up" && isEsm(url) ? Promise.reject(new TypeError(`Failed to fetch dynamically imported module: ${url} (simulated)`)) : import(url));
+  // jsDelivr's +esm builds, not raw files: raw files keep bare imports (hooks.module.js imports "preact"),
+  // which only resolve through an import map, so they can't serve router.import().
+  const router = createRouter({ "*": [esmSh(), jsDelivr({ esm: true })] }, { fetch: fetchSim, importer: importSim, now: () => performance.now() });
+
+  const outcome = (good, html) => Object.assign($("#outcome"), { hidden: false, className: `outcome ${good ? "good" : "bad"}`, innerHTML: html });
+  const label = (spec) => spec.replace(/@[^/@]+(?=\/|$)/, "");
+  const t0 = performance.now();
+
+  if (mode === "startup") {
+    $("#code").textContent = `const router = createRouter({ "*": [esmSh(), jsDelivr({ esm: true })] });
+const resolved = await Promise.all(${JSON.stringify(SPECS)}.map((s) => router.resolve(s)));
+injectImportMap(compileImportMap(resolved));   // <script type="importmap">
+
+await import("./app-main.mjs");                 // import { h, render } from "preact"; …`;
+    const results = await Promise.all(SPECS.map((s) => router.resolve(s).then((r) => ({ s, r }), (err) => ({ s, err }))));
+    $("#cards").replaceChildren(...results.map(({ s, r, err }) => card(s, r, err, t0)));
+    const resolved = results.filter((x) => x.r).map((x) => x.r);
+    const importMap = compileImportMap(resolved);
+    // "breaks": mport's check passed, but the files won't load. Point the map somewhere unreachable to reproduce that.
+    if (esm === "breaks") for (const k of Object.keys(importMap.imports)) importMap.imports[k] = importMap.imports[k].replace("https://esm.sh/", "https://esm.sh.invalid/");
+    $("#map").textContent = JSON.stringify(importMap, null, 2);
+    if (resolved.length < SPECS.length) {
+      outcome(false, "Some packages couldn't be resolved, so the app can't start.");
+    } else {
+      injectImportMap(importMap);
+      try {
+        const app = await import("./app-main.mjs");
+        app.mount($("#app"), { sources: resolved.map((r) => ({ label: label(r.specifier), version: r.version, provider: r.provider })) });
+        outcome(true, esm === "down"
+          ? "✓ esm.sh was down while resolving, so mport chose jsDelivr's ES-module builds, and the import map points there. The app loaded natively."
+          : "✓ Resolved once and installed as an import map. From here the browser imports <code>preact</code> by itself; mport is no longer involved.");
+      } catch (e) {
+        $("#app").replaceChildren(h("p", { className: "status" }, `${e.name}: ${e.message}`));
+        outcome(false, `✗ The app didn't load. mport's check passed (esm.sh answered), but the files fail to import, and <b>an import map has no fallback</b>: the browser won't try another URL. <a href="${link("runtime", esm)}">Try the same situation with router.import()</a>.`);
+      }
+    }
+  } else {
+    $("#code").textContent = `const router = createRouter({ "*": [esmSh(), jsDelivr({ esm: true })] });
+const [{ h, render }, { useState }, { default: htm }] = await Promise.all(
+  ${JSON.stringify(SPECS)}.map((s) => router.import(s)),   // resolve + import, with failover
+);`;
+    const loads = await Promise.all(SPECS.map(async (s) => {
+      const events = [];
+      try {
+        const module = await router.import(s, { onEvent: (e) => events.push(e) });
+        const last = [...events].reverse().find((e) => e.type === "ok" || e.type === "selected");
+        return { s, module, r: { provider: last?.provider, url: last?.url, version: events.find((e) => e.type === "resolved")?.version, trace: events } };
+      } catch (err) {
+        return { s, err: Object.assign(err, { trace: events }) };
+      }
+    }));
+    $("#cards").replaceChildren(...loads.map(({ s, r, err }) => card(`${s}  (router.import)`, r, err, t0)));
+    $("#map").textContent = "(none: in this mode every import goes through the router)";
+    if (loads.some((x) => x.err)) {
+      outcome(false, "Some dependencies couldn't be loaded from any CDN.");
+    } else {
+      const [{ h: ph, render }, { useState }, { default: htm }] = loads.map((x) => x.module);
+      const { App } = await import("./app-view.mjs");
+      render(ph(App({ h: ph, useState, htm }), { sources: loads.map((x) => ({ label: label(x.s), version: x.r.version, provider: x.r.provider })) }), $("#app"));
+      const retried = loads.some((x) => x.r.trace.some((e) => e.phase === "import"));
+      outcome(true, retried
+        ? "✓ esm.sh answered mport's check, but its modules failed to import, so router.import() excluded it and loaded each dependency from jsDelivr's ES-module builds. The app runs."
+        : esm === "down" ? "✓ esm.sh was unreachable, so each dependency came from jsDelivr's ES-module builds." : "✓ Each dependency was resolved and imported through the router.");
+    }
+  }
+</script>
+</body>
+</html>

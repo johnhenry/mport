@@ -212,21 +212,21 @@ export function createRouter(routes, options = {}) {
     return out;
   }
 
-  /** Runtime fallback: import through the router, retrying other mirrors of the same build. */
+  /** Runtime fallback: import through the router; a CDN whose import fails is excluded and the next is tried (same build only if a lockfile or opts.build pins it). */
   async function importModule(specifier, opts = {}) {
     const exclude = new Set(opts.exclude ?? []);
     const errors = [];
-    let build; // failover stays on mirrors of the first build chosen
+    // Failover may switch builds (esm.sh → jsDelivr) unless something pins one:
+    // the lockfile (via pins in resolve) or an explicit opts.build.
     for (;;) {
       let r;
       try {
-        r = await resolve(specifier, { ...opts, exclude, build: opts.build ?? build });
+        r = await resolve(specifier, { ...opts, exclude });
       } catch (e) {
         throw errors.length ? new RoutingError([...errors, e], `mport: could not import ${specifier}`) : e;
       }
       if (r === null) return importer(specifier);
       if (r.module) return r.module;
-      build ??= r.build;
       try {
         return await importer(r.url);
       } catch (e) {

@@ -8,7 +8,8 @@
 //                    down after that, the browser will not retry — import maps
 //                    have no fallback hook.
 //   createImporter() `await load("react")` goes through the router every time
-//                    and retries other mirrors of the same build on failure.
+//                    and retries the next CDN when an import fails (staying on
+//                    one build only if a lockfile or `build` option pins it).
 
 export function injectImportMap(importMap, { document = globalThis.document } = {}) {
   if (!document) throw new Error("mport: injectImportMap needs a document");
