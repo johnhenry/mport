@@ -29,7 +29,7 @@
       "default": "./src/firefox.mjs"
     },
     "./core": {
-      "types": "./src/types.d.ts",
+      "types": "./src/core.d.ts",
       "default": "./src/core.mjs"
     },
     "./package.json": "./package.json"
@@ -65,8 +65,12 @@
   ],
   "scripts": {
     "test": "node --test \"test/*.test.mjs\"",
+    "typecheck": "tsc -p tsconfig.json",
     "demo": "deno -A examples/demo.mjs",
     "demo:firefox": "deno -A examples/demo.firefox.mjs",
     "demo:html": "python3 -m http.server 8712"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
   }
 }
