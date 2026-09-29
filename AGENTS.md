@@ -37,7 +37,7 @@ Node 24 also runs everything today, but 26 is the floor that is tested.
   be traced `aborted` / `"lost the race"`, never `ok` (292a367). Tests wait a tick before
   asserting on losers.
 - **`probe: "none"` checks nothing, so it emits `selected` and records no health.** It used
-  to log 0 ms `ok` events and poison the adaptive scores (292a367).
+  to log 0 ms `ok` events that counted as real successes in health (292a367).
 - **Anything that cannot exist is a `ResolutionError`, and it must not be retried per
   provider.** `fallback()` and `race()` rethrow it by `name`; a `TypeError` from the range
   parser once turned `react@beta` into a `RoutingError` blaming every CDN (b70dabf).
