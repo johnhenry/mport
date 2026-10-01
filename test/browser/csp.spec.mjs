@@ -27,7 +27,8 @@ for (const { name, hash, allowed } of [
     await page.goto("/csp-static.html");
     if (allowed) {
       await page.waitForFunction(() => window.result === "dep-loaded");
-      expect(await page.evaluate(() => window.violations)).toEqual([]);
+      // (Firefox also requests /favicon.ico, which `default-src 'none'` blocks: only script violations matter)
+      expect((await page.evaluate(() => window.violations)).filter((v) => v.directive.startsWith("script-src"))).toEqual([]);
     } else {
       await page.waitForFunction(() => window.violations.some((v) => v.directive.startsWith("script-src")));
       expect(await page.evaluate(() => window.result)).toBeUndefined();
