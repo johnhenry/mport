@@ -621,7 +621,8 @@ milliseconds or a string: `"500ms"`, `"30s"`, `"1m"`, or a bare number of millis
 
 | Member | Meaning |
 |---|---|
-| `success(name, ms?)` | `ok++`, streak reset to 0, circuit closed; `ms` updates the smoothed latency (`0.7 × previous + 0.3 × ms`) |
+| `success(name, ms?, { keepStreak? }?)` | `ok++`, streak reset to 0, circuit closed; `ms` updates the smoothed latency (`0.7 × previous + 0.3 × ms`). With `keepStreak: true` it counts the success but leaves the streak and circuit alone |
+| `settle(name)` | streak reset to 0, circuit closed: a deferred success was confirmed |
 | `failure(name)` | `fail++`, `streak++`; when `streak >= failures` the circuit opens until `now() + reset` |
 | `isOpen(name)` | the circuit is open now |
 | `successRate(name)` | `(ok + 1) / (ok + fail + 1)`; 1 for an unknown provider |
@@ -635,6 +636,12 @@ Reading health never creates an entry.
 
 What records health: probe outcomes (not with `probe: "none"`), `verified()` mismatches,
 and `router.import()` import failures. Aborted race losers do not.
+
+Inside `router.import()` a passing probe does **not** reset the failure streak (it records
+`success(name, ms, { keepStreak: true })`); only a completed import calls `settle()`. So a
+mirror that answers the probe but whose module fails to load (syntax error, bad exports)
+accumulates failures and its circuit opens after `failures` imports in a row. `resolve()`
+and `build()` never import, so a passing probe still resets the streak there.
 
 ## Trace events
 

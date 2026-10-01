@@ -62,7 +62,7 @@ export async function select(p, req, ctx) {
   try {
     const { module } = (await ctx.probe(url, { provider: p, signal: ctx.signal })) ?? {};
     const ms = ctx.now() - t0;
-    health?.success(p.name, ms);
+    health?.success(p.name, ms, { keepStreak: ctx.deferStreak });
     // A probe that can't be cancelled (import) may finish after the race was decided.
     if (ctx.signal?.aborted) note(ctx, { type: "aborted", provider: p.name, url, ms, reason: "lost the race" });
     else note(ctx, { type: "ok", provider: p.name, url, ms });
@@ -253,12 +253,21 @@ export class HealthRegistry {
     if (!s) this.#state.set(name, (s = { ok: 0, fail: 0, streak: 0, latency: undefined, openUntil: 0 }));
     return s;
   }
-  success(name, ms) {
+  /** `keepStreak`: count the success but leave the failure streak alone (see `settle`). */
+  success(name, ms, { keepStreak = false } = {}) {
     const s = this.#get(name);
     s.ok++;
+    if (!keepStreak) {
+      s.streak = 0;
+      s.openUntil = 0;
+    }
+    if (Number.isFinite(ms)) s.latency = s.latency === undefined ? ms : s.latency * 0.7 + ms * 0.3;
+  }
+  /** A deferred success is confirmed (the import completed): reset the streak and close the circuit. */
+  settle(name) {
+    const s = this.#get(name);
     s.streak = 0;
     s.openUntil = 0;
-    if (Number.isFinite(ms)) s.latency = s.latency === undefined ? ms : s.latency * 0.7 + ms * 0.3;
   }
   failure(name) {
     const s = this.#get(name);

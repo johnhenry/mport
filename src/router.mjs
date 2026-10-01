@@ -160,6 +160,8 @@ export function createRouter(routes, options = {}) {
       exclude: opts.exclude == null || opts.exclude instanceof Set ? opts.exclude : new Set(opts.exclude),
       signal: opts.signal,
       health,
+      // router.import(): a passing probe doesn't reset the failure streak; a completed import does
+      deferStreak: opts._import === true,
       fetch,
       now,
       probe: probeFn,
@@ -221,14 +223,19 @@ export function createRouter(routes, options = {}) {
     for (;;) {
       let r;
       try {
-        r = await resolve(specifier, { ...opts, exclude });
+        r = await resolve(specifier, { ...opts, exclude, _import: true });
       } catch (e) {
         throw errors.length ? new RoutingError([...errors, e], `mport: could not import ${specifier}`) : e;
       }
       if (r === null) return importer(specifier);
-      if (r.module) return r.module;
+      if (r.module) {
+        health.settle(r.provider);
+        return r.module;
+      }
       try {
-        return await importer(r.url);
+        const module = await importer(r.url);
+        health.settle(r.provider);
+        return module;
       } catch (e) {
         errors.push(e);
         health.failure(r.provider);

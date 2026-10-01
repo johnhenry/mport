@@ -368,7 +368,10 @@ export class HealthRegistry {
   /** open duration in ms */
   reset: number;
   now: () => number;
-  success(name: string, ms?: number): void;
+  /** `keepStreak`: count the success but leave the failure streak and circuit alone (until `settle`) */
+  success(name: string, ms?: number, o?: { keepStreak?: boolean }): void;
+  /** a deferred success is confirmed: reset the streak and close the circuit */
+  settle(name: string): void;
   failure(name: string): void;
   isOpen(name: string): boolean;
   /** (ok + 1) / (ok + fail + 1) */
