@@ -9,5 +9,5 @@
     "skipLibCheck": false,
     "types": []
   },
-  "files": ["test/types.check.ts", "src/types.d.ts", "src/core.d.ts", "src/vite.d.ts", "src/rollup.d.ts", "src/plugins.d.ts"]
+  "files": ["test/types.check.ts", "src/types.d.ts", "src/core.d.ts", "src/vite.d.ts", "src/rollup.d.ts", "src/node.d.ts", "src/plugins.d.ts"]
 }

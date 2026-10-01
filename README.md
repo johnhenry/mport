@@ -197,9 +197,22 @@ Patterns match the specifier without its version, e.g. `npm:react/jsx-runtime`. 
 | `jspm()` | `jspm` | npm | `ga.jspm.io` builds |
 | `jsr()` | `esm.sh` | jsr | through esm.sh. `jsr({ via: "jsr.io" })` loads raw files from jsr.io and needs a path |
 | `github()` | `npm` | github | through jsDelivr's `/gh/`. `{ via: "esm.sh" }` also works |
-| `local({ base })` | `npm` | npm | your own copy, e.g. a vendored `node_modules` |
+| `local({ base })` | `npm` | npm | your own copy, e.g. a vendored `node_modules`. It looks up versions and entries in the npm registry; for a package that is not on npm, or to serve the installed version, add `registry: installedRegistry({ root })` from `@johnhenry/mport/node` (below) |
 | `custom(template)` | origin host | npm | `"https://x/"` or a template using `{name}` `{version}` `{path}` `{entry}` `{scope}` `{bare}` |
 | `provider({...})` | yours | yours | write your own: `{ name, build, registries, capabilities, needsEntry, needsVersion, url(artifact) }` |
+
+**Serving what is installed, including packages that are not on npm.** `local()` maps to your own origin but still asks the registry for the version and entry file, so a package installed from git is a 404. `@johnhenry/mport/node` has a registry client that reads `<root>/<name>/package.json` instead:
+
+```js
+import { createRouter, local } from "@johnhenry/mport";
+import { installedRegistry } from "@johnhenry/mport/node";
+
+const router = createRouter({ "*": local({ base: "/node_modules/" }) },
+  { registry: installedRegistry({ root: "node_modules" }), probe: "none" });
+await router.build(["@scope/unpublished"]);  // /node_modules/@scope/unpublished/<entry>, lock records the installed version
+```
+
+The installed version wins over the registry's `latest`, and a range it does not satisfy is an error. See [docs/api.md#installedregistry](docs/api.md#installedregistry); runnable: [example 17](examples/17-local-serves-a-package-that-is-not-on-npm.mjs).
 
 The CDN providers (`esmSh`, `jsDelivr`, `unpkg`, `jspm`, `jsr`) accept `origin`, so you can point them at a self-hosted mirror. Full URL shapes and capabilities: [docs/api.md#built-in-providers](docs/api.md#built-in-providers).
 
@@ -500,7 +513,7 @@ The default race still mixes builds (raw jsDelivr/unpkg files against jspm's tra
 
 ## Examples
 
-[`examples/README.md`](examples/README.md) indexes them all. Sixteen numbered Node examples prove one behaviour each, offline, against a fake network (`npm run examples`, or `npm run example:05` for one): range resolution, fallback, race, CommonJS skipping, lockfile pinning, the circuit breaker, `verified()`, `router.import()` failover, `build()`, the CLI, the 1.x race, server-rendered import maps, conflicting versions scoped per dependent, whole-graph integrity, `outdated`/`update`, and the Rollup plugin.
+[`examples/README.md`](examples/README.md) indexes them all. Seventeen numbered Node examples prove one behaviour each, offline, against a fake network (`npm run examples`, or `npm run example:05` for one): range resolution, fallback, race, CommonJS skipping, lockfile pinning, the circuit breaker, `verified()`, `router.import()` failover, `build()`, the CLI, the 1.x race, server-rendered import maps, conflicting versions scoped per dependent, whole-graph integrity, `outdated`/`update`, the Rollup plugin, and `local()` serving a package that is not on npm.
 
 Three browser pages share one header, one timeline and one way of explaining results:
 

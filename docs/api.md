@@ -28,7 +28,7 @@ tutorial; this is the reference.
 - [Errors](#errors)
 - [Lockfiles](#lockfiles)
 - [Import maps](#import-maps)
-- [Registry helpers and CommonJS detection](#registry-helpers-and-commonjs-detection) (incl. `outdated()`)
+- [Registry helpers and CommonJS detection](#registry-helpers-and-commonjs-detection) (incl. `outdated()` and `installedRegistry()`)
 - [Browser runtime helpers](#browser-runtime-helpers)
 - [semver](#semver)
 - [Bundler plugins](#bundler-plugins)
@@ -45,9 +45,10 @@ tutorial; this is the reference.
 | `@johnhenry/mport/core` | `src/core.mjs` | the router, providers, strategies, registry, import-map, lockfile, runtime and semver exports, without the v1 functions |
 | `@johnhenry/mport/vite` | `src/vite.mjs` | [`mportVite`](#bundler-plugins) (also the default export). Node-side build tooling. |
 | `@johnhenry/mport/rollup` | `src/rollup.mjs` | [`mportRollup`](#bundler-plugins) (also the default export). Node-side build tooling. |
+| `@johnhenry/mport/node` | `src/node.mjs` | [`installedRegistry`](#installedregistry): a registry client that reads installed packages from disk. Node only; it is the one entry point that imports `node:` modules, which is why it is not in `./core`. |
 | `mport` (bin) | `bin/mport.mjs` | the [CLI](#the-cli) |
 
-The first three module entry points are ES modules with no dependencies. The package is plain
+The module entry points are ES modules with no dependencies. The package is plain
 JavaScript that runs in browsers, Deno and Node; the router's defaults (`fetch`,
 `import()`) are the host's.
 
@@ -498,7 +499,11 @@ paths are used as written. A lockfile `entry` is used without a lookup and is tr
 be ESM.
 
 `local()` needs no version for its URL but still needs one to look up the entry, so it
-still reads the registry unless the lockfile pins the entry.
+still reads the registry unless the lockfile pins the entry. A package that is not on npm
+is then a `ResolutionError` ("not found in the registry"), and a published one resolves to
+the registry's `latest`, not to the copy you serve. Give the router an
+[`installedRegistry({ root })`](#installedregistry) (`createRouter(routes, { registry })`) and
+the version, the entry and the manifest all come from the installed `package.json`.
 
 ## Providers
 
@@ -533,7 +538,7 @@ Then the URL is built and [probed](#probing).
 | `jsr({ via: "jsr.io", origin?, name? })` | `jsr` | `jsr` | jsr | types, deno | no | `https://jsr.io/<name>/<version>/<path>`; throws without a path |
 | `github({ name? })` | `github` | `npm` | github | raw | no | `https://cdn.jsdelivr.net/gh/<user>/<repo>[@<ref>]/<path>` |
 | `github({ via: "esm.sh", name?, esTarget? })` | `github` | `esm.sh` | github | browser, esm-transform, types | no | `https://esm.sh/gh/<user>/<repo>[@<ref>][/<path>][?target=<esTarget>]` |
-| `local({ base?, name?, build? })` | `local` | `npm` | npm | raw, offline | yes | `<base>/<name>/<entry or path>`, `base` default `/node_modules/`; no version (`needsVersion: false`) |
+| `local({ base?, name?, build? })` | `local` | `npm` | npm | raw, offline | yes | `<base>/<name>/<entry or path>`, `base` default `/node_modules/`; no version (`needsVersion: false`). It still asks the router's registry for the version and entry: pair it with [`installedRegistry()`](#installedregistry) for packages that are not on npm or whose installed version must win. |
 | `custom(template, opts?)` | the template's host | the template's host | npm | none | with `{entry}` | see [custom()](#custom) |
 | `origin(o)` | `o.path` | `o.path` | npm | none | no | `https://<path><name><versionMarker><version>/<path>`; see [origin()](#origin) |
 
@@ -1024,6 +1029,58 @@ createRegistry({ fetch? = globalThis.fetch, npm? = "https://registry.npmjs.org",
 
 All memoized per client; failures are evicted. Errors are `ResolutionError`s as listed
 under [Errors](#errors).
+
+### installedRegistry()
+
+```ts
+import { installedRegistry } from "@johnhenry/mport/node";
+installedRegistry({ root, fallback? = false }): RegistryClient & { root: string }
+```
+
+A registry client that answers from packages **installed on disk**, for
+`createRouter(routes, { registry: installedRegistry({ root }) })`. It is the fix for
+`local()` with a package that is not on npm (installed from git, `file:` or a workspace link),
+and for a published package whose *installed* version must be the one served.
+
+| Option | Meaning |
+|---|---|
+| `root` | the directory holding the packages, normally `<project>/node_modules`: `<root>/<name>/package.json` is read (scoped names are nested). A path or a `file:` URL. Required. |
+| `fallback` | a registry client, e.g. `createRegistry()`, asked about packages that are **not** installed under `root` (`false`, the default, makes them a `ResolutionError`). Installed packages never reach it. |
+
+| Method | Answer |
+|---|---|
+| `version({ registry, name, range })` | the installed `version`. A dist-tag (`latest`) or no range means "whatever is installed"; a range the installed version does not satisfy is a `ResolutionError` (`react@18.3.1 is installed … does not satisfy "^19"`). Only npm: JSR and GitHub requests go to `fallback` or fail. |
+| `info(registry, name)` | `{ versions: [installed], tags: { latest: installed }, deprecated: Set{} }` |
+| `manifest(name, version)` | the installed `package.json`; asking for another version (a lockfile pin that no longer matches what is installed) is a `ResolutionError`, or goes to `fallback` |
+| `entryInfo(name, version, subpath?)`, `entry(...)` | [`entryInfo()`](#entryinfo) of that manifest: `exports` → `module` → `main`, with the same CommonJS judgement |
+
+Each manifest is read once per client. A missing package is `not installed under <root>`; a
+`package.json` that is not JSON or has no valid `version` is a `ResolutionError` naming the
+file. The lockfile then records the installed version (`local()` has `needsVersion: false`,
+so the import-map URL carries none).
+
+```js
+import { createRouter, local } from "@johnhenry/mport";
+import { installedRegistry } from "@johnhenry/mport/node";
+
+const router = createRouter(
+  { "*": local({ base: "/node_modules/" }) },
+  { registry: installedRegistry({ root: "node_modules" }), probe: "none" },
+);
+await router.build(["@scope/unpublished"]); // /node_modules/@scope/unpublished/<entry from its package.json>
+```
+
+**Why a registry client and not a `local({ packageRoot })` option.** A provider only turns an
+artifact into a URL and has to run in a browser; reading `package.json` from disk is a *lookup*,
+which is what the router's `registry` already abstracts (it also feeds `conflicts: "scope"` and
+[`dependencies`](#including-dependencies-dependencies) the manifests they need). One client therefore fixes every
+consumer at once, any provider (`jsDelivr()` in a build that is checked against local files, `custom()`) can use it, and `src/`
+stays free of `node:` imports.
+
+What it does not do: it does not read the files it serves, so a vendored copy has no `integrity`
+(`graph` skips origin-relative URLs, see [Whole-graph integrity](#whole-graph-integrity-graph)); it does not walk up
+parent `node_modules` directories (give the `root` that holds the package); and it does not follow
+symlinks specially (a workspace link is read through the link).
 
 ### pickVersion()
 

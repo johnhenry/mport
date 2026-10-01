@@ -14,6 +14,7 @@ import * as core from "@johnhenry/mport/core";
 import mportRollup, { mportRollup as namedRollup, type RollupPluginOptions } from "@johnhenry/mport/rollup";
 import mportVite, { mportVite as namedVite } from "@johnhenry/mport/vite";
 import firefoxDefault from "@johnhenry/mport/firefox";
+import { installedRegistry } from "@johnhenry/mport/node";
 
 export async function check(): Promise<void> {
   const router: Router = createRouter(
@@ -119,6 +120,13 @@ export async function check(): Promise<void> {
   void [asVite, asRollup];
   // @ts-expect-error mode is "external" or "importmap"
   mportVite(router, { mode: "inline" });
+
+  // installedRegistry is a RegistryClient
+  const installed = installedRegistry({ root: "node_modules", fallback: createRegistry() });
+  createRouter({ "*": local() }, { registry: installed });
+  void [installed.root, await installed.entry("a", "1.0.0")];
+  // @ts-expect-error root is required
+  installedRegistry({});
 
   // core has no v1 functions
   void core.createRouter;

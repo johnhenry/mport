@@ -32,6 +32,10 @@
       "types": "./src/core.d.ts",
       "default": "./src/core.mjs"
     },
+    "./node": {
+      "types": "./src/node.d.ts",
+      "default": "./src/node.mjs"
+    },
     "./vite": {
       "types": "./src/vite.d.ts",
       "default": "./src/vite.mjs"
@@ -95,6 +99,7 @@
     "example:14": "node examples/14-whole-graph-integrity-in-the-lockfile.mjs",
     "example:15": "node examples/15-outdated-and-update-keep-the-lockfile-current.mjs",
     "example:16": "node examples/16-rollup-plugin-routes-bare-imports.mjs",
+    "example:17": "node examples/17-local-serves-a-package-that-is-not-on-npm.mjs",
     "demo": "deno -A examples/demo.mjs",
     "demo:firefox": "deno -A examples/demo.firefox.mjs",
     "demo:html": "python3 -m http.server 8712"
