@@ -66,6 +66,47 @@ Nothing more will be published as `mport`. Install `@johnhenry/mport`.
   through to the range parser, whose `TypeError` every provider retried, ending in a
   `RoutingError` of `TypeError`s. Fixed in b70dabf.
 
+### Audit fixes (breaking changes, since 0.0.0 is unreleased)
+
+- **The circuit breaker trips for a mirror that passes the probe but fails to import.**
+  Inside `router.import()` a passing probe no longer resets the failure streak; only a
+  completed import does (`HealthRegistry.settle()`). In da58440.
+- **`resolveVersions: false` works with raw CDNs.** Providers that need an entry file skip
+  a range or tag with a reason instead of asking the registry about `react/^19` and
+  aborting the whole route. In d1a6870.
+- **The lockfile's `version` is only ever resolved.** `local()`/`origin()` wrote the range
+  (`^19`) there and the next run trusted it as exact; they now record the resolved version
+  or omit it, and a stale range entry is ignored. In 1355e0e.
+- **The output lockfile starts empty**, so specifiers you stopped building are pruned; the
+  input lockfile only pins. In fae913a.
+- **`cache()` keeps `entry`/`registry` on a hit, hits offline, and takes a `ttl`.** Its key
+  is the specifier as written (plus target, route and pin), not the resolved version, so a
+  hit makes no request at all. In 616663c (both).
+- **`build()` throws when two specifiers map one key to different URLs** (`react@18` and
+  `react@19`), pointing at scopes, instead of silently keeping one. In 8645866.
+- **Prefix specifiers skip providers that can't serve a directory.** `jsDelivr({ esm: true })`
+  threw a plain `Error` after a successful probe; raw CDNs mapped `react/` to a directory
+  whose `jsx-runtime` subpath 404s when the package has an `exports` map. Both skip with a
+  reason and the route falls through (new provider option `prefix`; `entryInfo()` reports
+  `hasExports`). In b539f89 (both).
+- **Semver:** a prerelease containing `-` (`1.0.0-beta-2`) is no longer truncated (ea636ef);
+  `latest` wins when it satisfies the range, as in npm, and deprecated versions are passed
+  over when others match (4174bfa).
+- **CLI:** a config may be a function `({ lock, relock }) => router`, so `--lock`/`--relock`
+  reach it; a prebuilt router refuses those flags and `build` no longer overwrites the lock
+  file around it. In f13115b.
+- **`fallback({ providers, circuitBreaker })` uses the router's health state and clock**
+  with its own thresholds (`HealthRegistry.scoped()`), so it shows in `router.health`
+  instead of a private registry on `Date.now`. In 4d83f2e.
+- **`esmSh()` pins `?target=es2022`** (`esTarget`, `null` to opt out) so bytes and integrity
+  don't vary by User-Agent; the docs now say integrity covers the entry module only. In a1add55.
+- **`verified()` with the default `head` probe makes one `GET`**, not a `HEAD` then a `GET`.
+  In f7f40c7.
+- **Server-side rendering:** `renderImportMap()`, `renderModulePreload()`, `modulePreloads()`
+  and `injectModulePreload()`, plus example 12. In c196736.
+- **`compileImportMap()` omits integrity for prefix keys in scopes too**, matching the top
+  level. In bbbcb6f.
+
 ### 1.x fixes (the v1 API now runs on the router)
 
 All in 35ac6af:
