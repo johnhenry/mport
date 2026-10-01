@@ -58,9 +58,9 @@ The `./core` exports, grouped:
 | Strategies | [`fallback`](#fallback), [`race`](#race), [`adaptive`](#adaptive), [`weighted`](#weighted), [`prefer`](#prefer), [`verified`](#verified), [`cache`](#cache), [`sri`](#sri) |
 | Health and errors | [`HealthRegistry`](#healthregistry), [`RoutingError`](#errors), [`SkipError`](#errors), [`IntegrityError`](#errors), [`ResolutionError`](#errors) |
 | Registry | [`createRegistry`](#createregistry), [`entryInfo`](#entryinfo), [`entryOf`](#entryof), [`resolveExports`](#resolveexports) |
-| Import maps | [`compileImportMap`](#compileimportmap), [`mergeImportMaps`](#mergeimportmaps) |
+| Import maps | [`compileImportMap`](#compileimportmap), [`mergeImportMaps`](#mergeimportmaps), [`renderImportMap`](#renderimportmap), [`modulePreloads`](#modulepreloads), [`renderModulePreload`](#rendermodulepreload) |
 | Lockfiles | [`createLock`](#createlock), [`lockKey`](#lockkey) |
-| Browser runtime | [`injectImportMap`](#injectimportmap), [`startup`](#startup), [`createImporter`](#createimporter) |
+| Browser runtime | [`injectImportMap`](#injectimportmap), [`injectModulePreload`](#injectmodulepreload), [`startup`](#startup), [`createImporter`](#createimporter) |
 | Misc | [`semver`](#semver), [`DEFAULT_CACHE_KEY`](#constants) |
 
 ## Concepts
@@ -815,6 +815,43 @@ mergeImportMaps(...maps: ImportMap[]): ImportMap
 
 Later maps win, per key; scopes merge per scope. Empty `scopes`/`integrity` are omitted.
 
+### renderImportMap()
+
+```ts
+renderImportMap(map: ImportMap, { nonce? }?): string
+```
+
+`<script type="importmap">…</script>` as an HTML string, for a server-rendered page (the
+counterpart of [`injectImportMap`](#injectimportmap), which needs a DOM). The JSON has
+`<`, U+2028 and U+2029 escaped, so no key or URL can end the element early. Put it before
+the first module script. `nonce` adds a CSP nonce attribute.
+
+### modulePreloads()
+
+```ts
+modulePreloads(map: ImportMap): Array<{ href: string, integrity?: string }>
+```
+
+Every distinct module URL in `imports` and `scopes` (prefix mappings are directories, not
+modules, and are left out), in order, each with its hash from `map.integrity` when there is
+one.
+
+### renderModulePreload()
+
+```ts
+renderModulePreload(map: ImportMap, { crossorigin? = "anonymous", nonce? }?): string
+```
+
+One `<link rel="modulepreload" href integrity? crossorigin>` per `modulePreloads(map)`
+entry, joined by newlines, with attributes HTML-escaped. Put them in `<head>` next to the
+import map so the browser fetches the modules before the importing script runs.
+`crossorigin: ""` omits the attribute.
+
+```js
+const { importMap } = await router.build(["react@^19"]);
+res.send(`<head>${renderModulePreload(importMap)}${renderImportMap(importMap)}</head>`);
+```
+
 ## Registry helpers and CommonJS detection
 
 ### createRegistry()
@@ -910,6 +947,16 @@ Creates `<script type="importmap">` with `JSON.stringify(map)` and inserts it be
 first `script[type="module"]` or existing `script[type="importmap"]`, or at the end of
 `<head>`. Throws `Error("mport: injectImportMap needs a document")` without one. It has
 to run before the first module import that uses the map resolves.
+
+### injectModulePreload()
+
+```ts
+injectModulePreload(map: ImportMap, { document? = globalThis.document, crossorigin? = "anonymous" }?): HTMLLinkElement[]
+```
+
+Appends a `<link rel="modulepreload">` to `<head>` for each `modulePreloads(map)` entry
+(with `integrity` where known) and returns the elements. Throws
+`Error("mport: injectModulePreload needs a document")` without a document.
 
 ### startup()
 

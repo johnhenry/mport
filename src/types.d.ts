@@ -408,12 +408,20 @@ export function resolveExports(exportsField: unknown, subpath?: string): string 
 
 export function compileImportMap(resolved: Array<Pick<Resolution, "key" | "url"> & Partial<Resolution>>, scoped?: Record<string, Array<Pick<Resolution, "key" | "url"> & Partial<Resolution>>>): ImportMap;
 export function mergeImportMaps(...maps: ImportMap[]): ImportMap;
+/** `<script type="importmap">…</script>` as an HTML string for server rendering (JSON escaped so nothing ends the script early). */
+export function renderImportMap(map: ImportMap, o?: { nonce?: string }): string;
+/** Every distinct non-prefix module URL in the map, with its `integrity` when the map has one. */
+export function modulePreloads(map: ImportMap): Array<{ href: string; integrity?: string }>;
+/** `<link rel="modulepreload">` tags, one per line, as an HTML string. */
+export function renderModulePreload(map: ImportMap, o?: { crossorigin?: string; nonce?: string }): string;
 
 export function createLock(data?: Partial<Lockfile>): Lock;
 /** Lockfile key: the specifier as written, normalized (explicit prefix kept, "gh:" → "github:", no trailing "/"). */
 export function lockKey(parsed: ParsedSpecifier): string;
 
 export function injectImportMap(map: ImportMap, o?: { document?: Document }): HTMLScriptElement;
+/** Add `<link rel="modulepreload">` elements for the map's modules to `<head>`; returns them. */
+export function injectModulePreload(map: ImportMap, o?: { document?: Document; crossorigin?: string }): HTMLLinkElement[];
 export function startup(router: Router, specifiers: string[], o?: { scopes?: Record<string, Record<string, string>>; document?: Document }): Promise<BuildResult>;
 export function createImporter(router: Router): <T = any>(specifier: string | SpecifierObject, options?: ResolveOptions) => Promise<T>;
 

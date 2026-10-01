@@ -11,6 +11,8 @@
 //                    and retries the next CDN when an import fails (staying on
 //                    one build only if a lockfile or `build` option pins it).
 
+import { modulePreloads } from "./importmap.mjs";
+
 export function injectImportMap(importMap, { document = globalThis.document } = {}) {
   if (!document) throw new Error("mport: injectImportMap needs a document");
   const el = document.createElement("script");
@@ -19,6 +21,20 @@ export function injectImportMap(importMap, { document = globalThis.document } = 
   const first = document.querySelector('script[type="module"], script[type="importmap"]');
   (first?.parentNode ?? document.head).insertBefore(el, first ?? null);
   return el;
+}
+
+/** Add `<link rel="modulepreload">` elements for the map's modules to the document head. */
+export function injectModulePreload(importMap, { document = globalThis.document, crossorigin = "anonymous" } = {}) {
+  if (!document) throw new Error("mport: injectModulePreload needs a document");
+  return modulePreloads(importMap).map(({ href, integrity }) => {
+    const el = document.createElement("link");
+    el.rel = "modulepreload";
+    el.href = href;
+    if (integrity) el.integrity = integrity;
+    if (crossorigin) el.crossOrigin = crossorigin;
+    document.head.appendChild(el);
+    return el;
+  });
 }
 
 /** Resolve `specifiers`, inject the import map, and return { importMap, lock }. */

@@ -370,8 +370,9 @@ Every export, from `@johnhenry/mport` (all of them), `@johnhenry/mport/firefox` 
 | [`createRegistry`](docs/api.md#createregistry) | `({ fetch?, npm?, jsr? }?)` | Version and entry lookups |
 | [`entryInfo`](docs/api.md#entryinfo), [`entryOf`](docs/api.md#entryof), [`resolveExports`](docs/api.md#resolveexports) | `(packageJson, subpath?)` | Entry-file selection and CommonJS detection |
 | [`compileImportMap`](docs/api.md#compileimportmap), [`mergeImportMaps`](docs/api.md#mergeimportmaps) | | Import maps from resolutions; merging |
+| [`renderImportMap`](docs/api.md#renderimportmap), [`renderModulePreload`](docs/api.md#rendermodulepreload), [`modulePreloads`](docs/api.md#modulepreloads) | `(importMap, options?)` | HTML strings (`<script type="importmap">`, `<link rel="modulepreload">`) for server rendering |
 | [`createLock`](docs/api.md#createlock), [`lockKey`](docs/api.md#lockkey) | | Lockfiles and their keys |
-| [`injectImportMap`](docs/api.md#injectimportmap), [`startup`](docs/api.md#startup), [`createImporter`](docs/api.md#createimporter) | | Browser runtime helpers |
+| [`injectImportMap`](docs/api.md#injectimportmap), [`injectModulePreload`](docs/api.md#injectmodulepreload), [`startup`](docs/api.md#startup), [`createImporter`](docs/api.md#createimporter) | | Browser runtime helpers |
 | [`semver`](docs/api.md#semver) | namespace | `parse`, `valid`, `compare`, `satisfies`, `maxSatisfying` |
 | [`mport`](docs/api.md#mport) (default), [`MPort`](docs/api.md#mport-and-mporturl), [`MPortURL`](docs/api.md#mport-and-mporturl) | | The v1 API (not in `./core`) |
 | [`DEFAULT_ORIGINS`, `DEFAULT_CACHE_KEY`](docs/api.md#constants) | | v1 defaults |
@@ -422,7 +423,7 @@ The default race still mixes builds (raw jsDelivr/unpkg files against jspm's tra
 
 ## Examples
 
-[`examples/README.md`](examples/README.md) indexes them all. Eleven numbered Node examples prove one behaviour each, offline, against a fake network (`npm run examples`, or `npm run example:05` for one): range resolution, fallback, race, CommonJS skipping, lockfile pinning, the circuit breaker, `verified()`, `router.import()` failover, `build()`, the CLI, and the 1.x race.
+[`examples/README.md`](examples/README.md) indexes them all. Twelve numbered Node examples prove one behaviour each, offline, against a fake network (`npm run examples`, or `npm run example:05` for one): range resolution, fallback, race, CommonJS skipping, lockfile pinning, the circuit breaker, `verified()`, `router.import()` failover, `build()`, the CLI, the 1.x race, and server-rendered import maps.
 
 Three browser pages share one header, one timeline and one way of explaining results:
 

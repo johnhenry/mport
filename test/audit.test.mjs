@@ -244,3 +244,36 @@ test("15. integrity is skipped for prefix keys at the top level and in scopes al
   );
   assert.deepEqual(map.integrity, { "https://x/a.js": "sha384-a", "https://x/b.js": "sha384-b" });
 });
+
+test("14b. server-side renderers: import map script, modulepreload links, DOM modulepreload", async () => {
+  const { renderImportMap, renderModulePreload, modulePreloads, injectModulePreload } = await import("../src/core.mjs");
+  const router = createRouter({ "*": verified(esmSh()) }, { fetch: fakeFetch({ ...registryFixtures, "https://esm.sh/*": "export default 1" }) });
+  const { importMap } = await router.build(["react@19.2.0", "lit/"], { scopes: { "/old/": { react: "react@18.3.1" } } });
+  const html = renderImportMap(importMap, { nonce: "n0nce" });
+  assert.match(html, /^<script type="importmap" nonce="n0nce">\{"imports":/);
+  assert.equal(JSON.parse(html.replace(/^<script[^>]*>|<\/script>$/g, "")).imports.react, importMap.imports.react);
+  // nothing in the data can close the script element
+  const evil = renderImportMap({ imports: { "</script><b>": "https://x/ " } });
+  assert.equal(evil.indexOf("</script>"), evil.length - "</script>".length);
+  assert.ok(!evil.includes(" "));
+
+  const preloads = modulePreloads(importMap);
+  assert.deepEqual(preloads.map((p) => p.href), [
+    "https://esm.sh/react@19.2.0?target=es2022", "https://esm.sh/react@18.3.1?target=es2022",
+  ], "prefix mappings are directories, not modules");
+  assert.match(preloads[0].integrity, /^sha384-/);
+  const links = renderModulePreload(importMap).split("\n");
+  assert.equal(links.length, 2);
+  assert.match(links[0], /^<link rel="modulepreload" href="https:\/\/esm\.sh\/react@19\.2\.0\?target=es2022" integrity="sha384-[^"]+" crossorigin="anonymous">$/);
+  assert.equal(renderModulePreload({ imports: { a: "https://x/a.js?x=1&y=\"2\"" } }, { crossorigin: "" }),
+    '<link rel="modulepreload" href="https://x/a.js?x=1&amp;y=&quot;2&quot;">');
+
+  const added = [];
+  const document = { createElement: () => ({}), head: { appendChild: (e) => added.push(e) } };
+  const els = injectModulePreload(importMap, { document });
+  assert.equal(els.length, 2);
+  assert.deepEqual([els[0].rel, els[0].href, els[0].crossOrigin], ["modulepreload", preloads[0].href, "anonymous"]);
+  assert.equal(els[0].integrity, preloads[0].integrity);
+  assert.equal(added.length, 2);
+  assert.throws(() => injectModulePreload(importMap, { document: null }), /needs a document/);
+});

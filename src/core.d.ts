@@ -7,9 +7,9 @@ export {
   fallback, race, adaptive, weighted, prefer, verified, cache, sri,
   HealthRegistry, RoutingError, SkipError, IntegrityError,
   createRegistry, entryOf, entryInfo, resolveExports, ResolutionError,
-  compileImportMap, mergeImportMaps,
+  compileImportMap, mergeImportMaps, renderImportMap, modulePreloads, renderModulePreload,
   createLock, lockKey,
-  injectImportMap, startup, createImporter,
+  injectImportMap, injectModulePreload, startup, createImporter,
   semver,
   DEFAULT_CACHE_KEY,
 } from "./types.js";

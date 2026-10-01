@@ -49,3 +49,48 @@ export function mergeImportMaps(...maps) {
   for (const k of ["scopes", "integrity"]) if (!Object.keys(out[k]).length) delete out[k];
   return out;
 }
+
+// ------------------------------------------------------------ server-side rendering
+// Strings for a server-rendered page, the counterpart of runtime.mjs's DOM injection.
+
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/**
+ * `<script type="importmap">` for an import map, as an HTML string. The JSON is escaped
+ * (`<`, U+2028, U+2029) so that no URL or key can end the script element early.
+ * Place it before the first module script. `nonce` adds a CSP nonce attribute.
+ */
+export function renderImportMap(importMap, { nonce } = {}) {
+  const json = JSON.stringify(importMap)
+    .replace(/</g, "\\u003c")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+  return `<script type="importmap"${nonce ? ` nonce="${esc(nonce)}"` : ""}>${json}</script>`;
+}
+
+/**
+ * The modules an import map points at, as `{ href, integrity? }`: every distinct
+ * non-prefix URL in `imports` and `scopes`, in order, with its hash from `integrity`.
+ */
+export function modulePreloads(importMap) {
+  const urls = new Set();
+  const add = (map) => { for (const v of Object.values(map ?? {})) if (typeof v === "string" && !v.endsWith("/")) urls.add(v); };
+  add(importMap.imports);
+  for (const m of Object.values(importMap.scopes ?? {})) add(m);
+  return [...urls].map((href) => {
+    const integrity = importMap.integrity?.[href];
+    return integrity ? { href, integrity } : { href };
+  });
+}
+
+/**
+ * `<link rel="modulepreload">` tags (one per line) for an import map's modules, so the
+ * browser starts fetching them before the importing script runs. Carries `integrity`
+ * where the map has it. `crossorigin` defaults to "anonymous" (what CDNs need).
+ */
+export function renderModulePreload(importMap, { crossorigin = "anonymous", nonce } = {}) {
+  return modulePreloads(importMap).map(({ href, integrity }) =>
+    `<link rel="modulepreload" href="${esc(href)}"${integrity ? ` integrity="${esc(integrity)}"` : ""}` +
+    `${crossorigin ? ` crossorigin="${esc(crossorigin)}"` : ""}${nonce ? ` nonce="${esc(nonce)}"` : ""}>`,
+  ).join("\n");
+}
