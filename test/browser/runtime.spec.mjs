@@ -145,6 +145,37 @@ const buildGraph = async () => {
   return router.build(["lit@^3"], { graph: true });
 };
 
+// An import map placed AFTER a modulepreload is ignored by Firefox (155): the preload has "started a module
+// load". mport's docs and example 12 used to print renderModulePreload() before renderImportMap(), which broke
+// every bare import in Firefox. The map-first order works everywhere; the fail-first one is pinned per engine.
+const mapAndPreload = (map, { preloadFirst }) => {
+  const [m, l] = [renderImportMap(map), renderModulePreload(map)];
+  return `<!doctype html><html><head><meta charset="utf-8"><title>order</title>${preloadFirst ? l + m : m + l}</head>` +
+    `<body><script type="module">const m = await import("lit"); window.__result = m.default;</script></body></html>`;
+};
+
+test("modulepreload before the import map: Firefox ignores the map; after it, every engine takes it", async ({ page: p, context, browserName }) => {
+  const { importMap } = await buildGraph();
+  await installStubs(context, { tamper: graphBytes('export default "deep:lit";') });
+  await installPages(context, {
+    "map-first": mapAndPreload(importMap, { preloadFirst: false }),
+    "preload-first": mapAndPreload(importMap, { preloadFirst: true }),
+  });
+  await p.goto("/__gen/map-first.html");
+  expect(await result(p)).toBe("deep:lit");
+
+  const q = await context.newPage();
+  const warnings = [];
+  q.on("console", (m) => warnings.push(m.text()));
+  await q.goto("/__gen/preload-first.html");
+  await q.waitForTimeout(1500);
+  const loaded = await q.evaluate(() => window.__result ?? null);
+  test.info().annotations.push({ type: "map after modulepreload", description: loaded ? "accepted" : "ignored" });
+  console.log(`[${browserName}] import map after a modulepreload: ${loaded ? "accepted" : "ignored"}`);
+  expect(loaded === "deep:lit").toBe(browserName !== "firefox");
+  if (!loaded) expect(warnings.join("\n")).toMatch(/Import maps are not allowed after a module load or preload has started/);
+});
+
 test("graph: the whole import graph is hashed into the map and every engine loads it", async ({ page: p, context }) => {
   const { importMap, graph } = await buildGraph();
   expect(Object.keys(importMap.integrity).sort()).toEqual([DEEP, ENTRY]);

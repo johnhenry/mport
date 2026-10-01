@@ -8,8 +8,9 @@ import { offlineFetch, registry, allUp } from "./_offline.mjs";
 const router = createRouter({ "*": verified(esmSh()) }, { fetch: offlineFetch({ ...registry, ...allUp }) });
 const { importMap } = await router.build(["react@^19", "lit/"]);
 
-const head = `${renderModulePreload(importMap)}\n${renderImportMap(importMap)}`;
-assert.match(head, /^<link rel="modulepreload" href="https:\/\/esm\.sh\/react@19\.2\.0\?target=es2022" integrity="sha384-[^"]+" crossorigin="anonymous">\n<script type="importmap">/);
+// The import map first: Firefox ignores one that follows a modulepreload (test/browser/runtime.spec.mjs).
+const head = `${renderImportMap(importMap)}\n${renderModulePreload(importMap)}`;
+assert.match(head, /^<script type="importmap">.*<\/script>\n<link rel="modulepreload" href="https:\/\/esm\.sh\/react@19\.2\.0\?target=es2022" integrity="sha384-[^"]+" crossorigin="anonymous">/s);
 assert.ok(!head.includes('href="https://esm.sh/lit@3.3.1/"'), "a prefix mapping is a directory, not a module to preload");
 
 await assert.rejects(router.build(["react@18.3.1", "react@^19"]), /conflicting resolutions for "react".*scope/);

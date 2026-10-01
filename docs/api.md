@@ -981,13 +981,16 @@ renderModulePreload(map: ImportMap, { crossorigin? = "anonymous", nonce? }?): st
 ```
 
 One `<link rel="modulepreload" href integrity? crossorigin>` per `modulePreloads(map)`
-entry, joined by newlines, with attributes HTML-escaped. Put them in `<head>` next to the
-import map so the browser fetches the modules before the importing script runs.
+entry, joined by newlines, with attributes HTML-escaped. Put them in `<head>` so the browser
+fetches the modules before the importing script runs, **after the import map**: Firefox
+(155) ignores an import map that comes after a `modulepreload` (it has "started a module
+load or preload", the same warning as for a late map), so every bare import on the page then
+fails there, while Chromium and WebKit take either order (a browser test pins this down).
 `crossorigin: ""` omits the attribute.
 
 ```js
 const { importMap } = await router.build(["react@^19"]);
-res.send(`<head>${renderModulePreload(importMap)}${renderImportMap(importMap)}</head>`);
+res.send(`<head>${renderImportMap(importMap)}${renderModulePreload(importMap)}</head>`);
 ```
 
 ### parseImports()

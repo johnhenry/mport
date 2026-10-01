@@ -91,6 +91,7 @@ export function modulePreloads(importMap) {
  * `<link rel="modulepreload">` tags (one per line) for an import map's modules, so the
  * browser starts fetching them before the importing script runs. Carries `integrity`
  * where the map has it. `crossorigin` defaults to "anonymous" (what CDNs need).
+ * Place these AFTER `renderImportMap()`: Firefox ignores an import map that follows a modulepreload.
  */
 export function renderModulePreload(importMap, { crossorigin = "anonymous", nonce } = {}) {
   return modulePreloads(importMap).map(({ href, integrity }) =>
