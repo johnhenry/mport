@@ -57,6 +57,7 @@ test("late import maps: Chromium and WebKit take one after a module has loaded, 
   await page.evaluate(() => window.mport.injectImportMap({ imports: { demo: "https://esm.sh/lit@3.3.1?target=es2022" } }));
   const accepted = (await runModule(page, `done((await import("demo")).default);`)) === "stub:lit";
   test.info().annotations.push({ type: "late import map", description: accepted ? "accepted" : "ignored" });
+  console.log(`[${browserName}] import map added after a module has loaded: ${accepted ? "accepted" : "ignored"}`);
   expect(accepted).toBe(acceptsLateMaps(browserName));
   if (!accepted) expect(warnings.join("\n")).toMatch(/Import maps are not allowed after a module load/);
 });
@@ -157,7 +158,7 @@ test("graph: the whole import graph is hashed into the map and every engine load
   expect(requests.some((r) => r.url === ENTRY)).toBe(true);
 });
 
-test("graph: a file that changes after hashing is refused by engines that enforce import-map integrity", async ({ page: p, context }) => {
+test("graph: a file that changes after hashing is refused by engines that enforce import-map integrity", async ({ page: p, context, browserName }) => {
   const { importMap } = await buildGraph();
   // an unrelated module with a wrong hash tells us whether this engine enforces integrity at all
   importMap.imports.control = "https://esm.sh/nanoid@5.1.5?target=es2022";
@@ -173,5 +174,6 @@ test("graph: a file that changes after hashing is refused by engines that enforc
   const r = await result(p);
   const enforces = r.control === "refused";
   test.info().annotations.push({ type: "import-map integrity", description: enforces ? "enforced by this engine" : "ignored by this engine" });
+  console.log(`[${browserName}] import-map integrity: ${enforces ? "enforced" : "ignored"}`);
   expect(r.lit).toBe(enforces ? "refused" : "loaded:evil");
 });
