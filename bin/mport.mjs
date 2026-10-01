@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // mport build   [specifier...] [--config mport.config.mjs] [--out importmap.json] [--lock mport.lock.json] [--relock]
 //               [--conflicts error|scope] [--graph [--max-files N] [--max-depth N]]
+//               [--dependencies [--dependency-depth N]]
 // mport outdated [name...] [--config file] [--lock mport.lock.json] [--json]
 // mport update   [name...] [--config file] [--lock mport.lock.json] [--json]
 // mport resolve <specifier> [--config mport.config.mjs] [--trace]
@@ -21,11 +22,15 @@ import { outdated, selectEntries } from "../src/outdated.mjs";
 
 const USAGE = `usage:
   mport build [specifier...] [--config file] [--out importmap.json] [--lock mport.lock.json] [--relock] [--conflicts error|scope]
-              [--graph [--max-files N] [--max-depth N]]
+              [--graph [--max-files N] [--max-depth N]] [--dependencies [--dependency-depth N]]
   mport resolve <specifier> [--config file] [--trace]
   mport outdated [name...] [--config file] [--lock mport.lock.json] [--json]
   mport update   [name...] [--config file] [--lock mport.lock.json] [--json]`;
 
+const numeric = (flag, text) => {
+  if (!/^\d+$/.test(text)) throw new Error(`mport: ${flag} must be a non-negative integer, got "${text}"`);
+  return +text;
+};
 const exists = (p) => access(p).then(() => true, () => false);
 
 export async function main(argv = process.argv.slice(2), { log = console.log, cwd = process.cwd() } = {}) {
@@ -43,6 +48,8 @@ export async function main(argv = process.argv.slice(2), { log = console.log, cw
       graph: { type: "boolean", default: false },
       "max-files": { type: "string" },
       "max-depth": { type: "string" },
+      dependencies: { type: "boolean", default: false },
+      "dependency-depth": { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -99,7 +106,7 @@ export async function main(argv = process.argv.slice(2), { log = console.log, cw
     const keep = Object.entries(lockFile.packages ?? {});
     const specifiers = [...new Set(keep.map(([k, e]) => e.specifier ?? k))];
     const graph = lockFile.files ? config.graph || true : config.graph; // a lockfile that has file hashes keeps having them
-    const { lock: next } = await router.build(specifiers, { conflicts: "scope", graph });
+    const { lock: next } = await router.build(specifiers, { conflicts: "scope", graph, ...(config.dependencies && { dependencies: config.dependencies, ...(config.dependencyDepth !== undefined && { dependencyDepth: config.dependencyDepth }) }) });
     const updated = [];
     for (const [key] of toUpdate) {
       const from = lockFile.packages[key]?.version;
@@ -128,7 +135,15 @@ export async function main(argv = process.argv.slice(2), { log = console.log, cw
     const graph = values.graph || values["max-files"] || values["max-depth"]
       ? { ...(config.graph === true ? {} : config.graph), ...(values["max-files"] && { maxFiles: +values["max-files"] }), ...(values["max-depth"] && { maxDepth: +values["max-depth"] }) }
       : config.graph;
-    const { importMap, lock: newLock, graph: walked } = await router.build(list, { scopes: config.scopes, conflicts: values.conflicts ?? config.conflicts, graph });
+    const dependencies = values.dependencies || values["dependency-depth"] ? true : config.dependencies;
+    const dependencyDepth = values["dependency-depth"] !== undefined ? numeric("--dependency-depth", values["dependency-depth"]) : config.dependencyDepth;
+    const { importMap, lock: newLock, graph: walked, dependencies: deps } = await router.build(list, {
+      scopes: config.scopes, conflicts: values.conflicts ?? config.conflicts, graph,
+      ...(dependencies && { dependencies, ...(dependencyDepth !== undefined && { dependencyDepth }) }),
+    });
+    for (const d of deps?.added ?? []) log(`mport: dependency ${d.specifier} (needed by ${d.from}, depth ${d.depth}) -> ${d.url}`);
+    for (const s of deps?.skipped ?? []) if (s.name) log(`mport: warning: dependency ${s.name}@${s.range} of ${s.from} was not added: ${s.reason}`);
+    for (const t of deps?.truncated ?? []) log(`mport: warning: dependency ${t.name}@${t.range} of ${t.from} is deeper than --dependency-depth ${t.limit} and was not added`);
     for (const t of walked?.truncated ?? []) {
       log(`mport: warning: the import graph of ${t.root} was cut short at ${t.reason} ${t.limit} (${t.skipped} file(s) not hashed)`);
     }

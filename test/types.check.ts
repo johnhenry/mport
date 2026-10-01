@@ -57,6 +57,10 @@ export async function check(): Promise<void> {
   void [reports[0]?.kept.url, reports[0]?.scoped[0]?.scope, reports[0]?.unscoped.length];
   // @ts-expect-error conflicts is "error" or "scope"
   await router.build(["react"], { conflicts: "merge" });
+  const withDeps = await router.build(["safe-fragment@1"], { dependencies: "prod", dependencyDepth: 3 });
+  void [withDeps.dependencies?.added[0]?.from, withDeps.dependencies?.skipped[0]?.reason, withDeps.dependencies?.truncated[0]?.limit, withDeps.dependencies?.maxDepth];
+  // @ts-expect-error dependencies is false, true or "prod"
+  await router.build(["react"], { dependencies: "dev" });
   const walked = await router.build(["react@19"], { graph: { maxFiles: 100, maxDepth: 5, dynamic: true, origins: ["https://esm.sh"], algorithm: "sha512" } });
   const gr: GraphReport | undefined = walked.graph;
   void [gr?.files, gr?.truncated[0]?.reason, gr?.bare, walked.lock.files?.["https://x.test/a.js"]];

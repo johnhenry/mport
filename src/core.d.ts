@@ -15,7 +15,7 @@ export {
 } from "./types.js";
 
 export type {
-  MPortOptions, SpecifierObject, CspHashAlgorithm, MPortOrigin, Registry, ParsedSpecifier, Artifact, TraceEvent, Resolution,
+  MPortOptions, SpecifierObject, CspHashAlgorithm, DependencyReport, MPortOrigin, Registry, ParsedSpecifier, Artifact, TraceEvent, Resolution,
   Node, Provider, ProviderDefinition, Match, Route, Routes, LockEntry, Lockfile, Lock, ImportMap, Probe,
   CircuitBreakerOptions, RegistryClient, RouterOptions, ResolveOptions, BuildOptions, BuildResult, Router,
   CacheStore, HealthState, ConflictReport, GraphOptions, GraphReport, RegistryInfo, OutdatedRow,

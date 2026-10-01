@@ -313,7 +313,7 @@ at runtime only works when the page's import map already covers those.
 ### router.build()
 
 ```ts
-router.build(specifiers: string[], options?: { scopes?, signal?, conflicts?, graph? }): Promise<{ importMap: ImportMap, lock: Lockfile, conflicts: ConflictReport[], graph?: GraphReport }>
+router.build(specifiers: string[], options?: { scopes?, signal?, conflicts?, graph?, dependencies?, dependencyDepth? }): Promise<{ importMap: ImportMap, lock: Lockfile, conflicts: ConflictReport[], dependencies?: DependencyReport, graph?: GraphReport }>
 ```
 
 Resolves every specifier concurrently and compiles an [import map](#import-maps).
@@ -331,11 +331,80 @@ Any other value is a `TypeError`. The result's `conflicts` array holds one
 `graph` (default off) is `true` or [`GraphOptions`](#whole-graph-integrity-graph); the result then
 has a `graph` report.
 
+`dependencies` (default `false`) is `true` or `"prod"` and `dependencyDepth` (default `5`) a
+non-negative integer; see [Including dependencies](#including-dependencies-dependencies). Any other
+value is a `TypeError`. The result then has a `dependencies` report.
+
 `lock` is `router.lock.toJSON()`: every resolution this router has made itself so far,
 including earlier `resolve()` and `import()` calls, not only this build's specifiers. It
 starts **empty**: entries of the `lock` option are read-only pins, never copied across, so
 specifiers you no longer build are pruned from the written lockfile. Use a fresh router
 per build if the lockfile should contain exactly one build's inputs.
+
+#### Including dependencies (`dependencies`)
+
+A raw file CDN (jsDelivr, unpkg) or `local()` serves a package's files exactly as published. A
+file that says `import("dompurify")` or `import "preact"` keeps that bare specifier, which the
+browser resolves through **your** import map, and the map holds only what you asked `build()` for.
+You can list every dependency by hand, or let the build read each resolved package's manifest:
+
+```js
+const { importMap, dependencies } = await router.build(["safe-fragment@1"], { dependencies: true });
+// importMap.imports: { "safe-fragment": ".../safe-fragment@1.0.0/index.js", "dompurify": ".../dompurify@3.2.0/purify.es.mjs" }
+```
+
+| Option | Meaning |
+|---|---|
+| `dependencies: true` or `"prod"` | the two are the same: add the package's manifest **`dependencies`**. Dev, peer and optional dependencies are not added (a peer is the app's choice; list it yourself). Default `false`. |
+| `dependencyDepth` | levels to follow, the specifiers you list being level 0 (default `5`; `0` adds nothing and reports every direct dependency as truncated). Dependencies of dependencies are followed, each `name@version`'s manifest is read once, and cycles end. |
+
+How each dependency is handled:
+
+- **It is routed like any specifier**, `<name>@<range>` through the router's own routes (so a
+  dependency can land on a different provider than its dependent), resolved to an exact version by the
+  usual rules and **locked** in `result.lock` as `<name>@<range>`. A lockfile therefore reproduces the
+  expanded build. The import-map key is the package name; a sub-path an entry imports
+  (`dompurify/purify.js`) is not added, list it as a specifier.
+- **Ranges are respected.** A dependency already in the build (listed, or added earlier) whose
+  resolved version satisfies the dependent's range is left alone. If it does not satisfy it, the
+  dependency is resolved at the dependent's range too and meets the existing
+  [`conflicts`](#conflicting-versions-conflicts-scope) handling: the default `"error"` throws
+  (`conflicting resolutions for "dompurify"…`), `"scope"` keeps the first and gives the dependent a scope with its own version.
+  The expansion runs before `conflicts` and `graph`, so scopes cover added packages and `graph` hashes their files.
+- **Only packages on raw-file providers are expanded**: those with the `raw` capability
+  (`jsDelivr()`, `unpkg()`, `local()`, and a `custom()` / `provider()` you declare `capabilities: ["raw"]`
+  for) from the npm registry. **esm.sh and `jsDelivr({ esm: true })` rewrite a module's imports
+  themselves** (the bare `"dompurify"` in the source becomes a URL to the dependency, which they
+  serve). Adding the same packages to the map would only duplicate them, at the risk of a different
+  version than the one the CDN wired in. jspm is also a transforming provider (build `jspm`, no `raw`
+  capability), so it is treated the same way. They are reported in `skipped` as `rewrites its own imports`
+  and no manifest is fetched.
+  GitHub and JSR packages have no npm manifest and are not expanded.
+- **A dependency that cannot be added is reported, not thrown**: a range that is not a registry
+  range (`github:…`, `file:…`, `workspace:…`, `npm:` aliases), no matching route, or a
+  resolution error (not published, CommonJS-only on a raw CDN) goes to `skipped` with its reason, and
+  everything else is still added. Aborting (`signal`) does throw.
+
+`result.dependencies`:
+
+```ts
+{
+  added: [{ specifier, key, version, url, provider, from, range, depth }],   // from: "<name>@<version>" of the dependent
+  skipped: [{ from, provider?, name?, range?, reason }],                      // name + range: a dependency; else a package not expanded
+  truncated: [{ name, range, from, depth, limit }],                           // beyond dependencyDepth
+  maxDepth,
+}
+```
+
+Each addition is also an `onEvent` event, `{ type: "dependency", phase: "dependencies", provider: "build", reason }`
+(`truncated` and `fail` likewise). From the CLI: `mport build --dependencies [--dependency-depth N]`, or
+`dependencies` / `dependencyDepth` in the config; it prints each added dependency and a warning for
+each skipped or truncated one. `registry.manifest()` is required: the default client and
+[`installedRegistry()`](#installedregistry) have it. `mport update` also honours `config.dependencies`.
+
+Limits: manifests describe what a package *declares*; a module that imports something it does
+not declare is not helped, and a package that imports a Node built-in or a CommonJS dependency is not made browser-ready by
+this (the dependency lands in `skipped`). Nested `node_modules` layouts are not modelled with `local()` + `installedRegistry()`: one version per name, from `root`.
 
 #### Conflicting versions (`conflicts: "scope"`)
 
@@ -840,6 +909,9 @@ as `error.trace`; `onEvent` receives each event as it happens. Every event has
 | `fail`, `phase: "integrity"` | `verified()` got bytes with the wrong hash | `provider`, `url`, `error: "expected …, got …"` |
 | `fail`, `phase: "integrity"` | `build({ graph })` fetched a file whose hash differs from the lockfile's `files` entry. **`onEvent` only** | `provider`, `url`, `error` |
 | `truncated`, `phase: "graph"` | `build({ graph })` hit `maxFiles` or `maxDepth` and left files unhashed. **`onEvent` only** | `provider`, `url` (the module), `reason`, `limit`, `skipped`, `examples` |
+| `dependency`, `phase: "dependencies"` | `build({ dependencies })` added one entry. **`onEvent` only** | `provider: "build"`, `reason: "<specifier> -> <url> (needed by <name@version>, depth N)"` |
+| `truncated`, `phase: "dependencies"` | `build({ dependencies })` found a dependency deeper than `dependencyDepth`. **`onEvent` only** | `provider: "build"`, `reason` |
+| `fail`, `phase: "dependencies"` | `build({ dependencies })` could not resolve a dependency (it is in `result.dependencies.skipped`). **`onEvent` only** | `provider: "build"`, `reason` |
 | `conflict` | `build({ conflicts: "scope" })` handled one conflicting key. **`onEvent` only** | `provider: "build"`, `reason` |
 | `fail`, `phase: "import"` | `router.import()` failed to import a resolved URL. **`onEvent` only**, not in a trace. | `provider`, `url`, `error` |
 
@@ -1371,7 +1443,7 @@ against Rollup 4 and Vite 8 (Rolldown-based); other majors are untested.
 
 ```
 mport build   [specifier...] [--config file] [--out importmap.json] [--lock mport.lock.json] [--relock] [--conflicts error|scope]
-              [--graph [--max-files N] [--max-depth N]]
+              [--graph [--max-files N] [--max-depth N]] [--dependencies [--dependency-depth N]]
 mport resolve <specifier> [--config file] [--trace] [--lock mport.lock.json] [--relock]
 mport outdated [name...] [--config file] [--lock mport.lock.json] [--json]
 mport update   [name...] [--config file] [--lock mport.lock.json] [--json]
@@ -1390,6 +1462,8 @@ global `fetch` (Node 18+; the package declares Node >= 26).
 | `--conflicts` | | config's `conflicts`, else `error` | `build`: `scope` generates import-map scopes for conflicting versions (see [Conflicting versions](#conflicting-versions-conflicts-scope)) |
 | `--graph` | | `false` (or config's `graph`) | `build`: hash the whole import graph (see [Whole-graph integrity](#whole-graph-integrity-graph)); the lockfile gets `files`, the import map `integrity` for every file; prints a warning per truncated walk |
 | `--max-files`, `--max-depth` | | 500, 20 | the graph bounds; imply `--graph` |
+| `--dependencies` | | `false` (or config's `dependencies`) | `build`: also add each raw-CDN package's manifest `dependencies` (see [Including dependencies](#including-dependencies-dependencies)); prints each addition and a warning per skipped or too-deep dependency |
+| `--dependency-depth` | | 5 | how many levels of dependencies to follow; implies `--dependencies` |
 | `--json` | | `false` | `outdated` and `update` print JSON |
 | `--trace` | | `false` | `resolve` prints the trace too |
 | `--help` | `-h` | | print usage |
@@ -1406,6 +1480,7 @@ global `fetch` (Node 18+; the package declares Node >= 26).
 | `scopes` | none | passed to `build` |
 | `graph` | off | `true` or `GraphOptions`, passed to `build` |
 | `conflicts` | `"error"` | passed to `build` (the `--conflicts` flag overrides it) |
+| `dependencies`, `dependencyDepth` | off, `5` | passed to `build` (the flags override them) |
 
 With no config at all, the default routes are used.
 

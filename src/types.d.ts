@@ -120,7 +120,7 @@ export interface Artifact {
 }
 
 export interface TraceEvent {
-  type: "lookup" | "resolved" | "probe" | "ok" | "selected" | "fail" | "skip" | "aborted" | "conflict" | "truncated";
+  type: "lookup" | "resolved" | "probe" | "ok" | "selected" | "fail" | "skip" | "aborted" | "conflict" | "truncated" | "dependency";
   /** for "resolved": the exact version the registry lookup chose */
   version?: string;
   /** "import": router.import() failed to load a resolved URL; "integrity": verified() or the graph walk rejected it; "graph": the graph walk hit a bound */
@@ -316,6 +316,27 @@ export interface BuildOptions {
    * `integrity` entries and the lockfile's `files`). `true` uses the defaults.
    */
   graph?: boolean | GraphOptions;
+  /**
+   * Also add the manifest `dependencies` of each resolved package as routed entries, for packages
+   * served by a raw-file provider (jsDelivr, unpkg, `local()`), whose own bare imports are otherwise
+   * missing from the map. `true` and `"prod"` mean the same: `dependencies` only, not dev, peer or
+   * optional ones. Providers that rewrite imports (esm.sh, jsDelivr `+esm`, jspm, jsr) are not expanded.
+   * Default `false`.
+   */
+  dependencies?: boolean | "prod";
+  /** how many levels of dependencies to follow, the listed packages being level 0 (default 5; 0 adds none) */
+  dependencyDepth?: number;
+}
+
+/** What `build({ dependencies })` did. */
+export interface DependencyReport {
+  /** the entries added, in the order they were found */
+  added: Array<{ specifier: string; key: string; version?: string; url: string; provider: string; /** the dependent, `name@version` */ from: string; range: string; depth: number }>;
+  /** what was not added, with the reason: providers that rewrite their own imports (`{ from, provider, reason }`), and dependencies with an unsupported range, no route or that failed to resolve (`{ name, range, from, reason }`) */
+  skipped: Array<{ from: string; provider?: string; name?: string; range?: string; reason: string }>;
+  /** dependencies beyond `dependencyDepth` */
+  truncated: Array<{ name: string; range: string; from: string; depth: number; limit: number }>;
+  maxDepth: number;
 }
 
 export interface GraphOptions {
@@ -362,6 +383,8 @@ export interface BuildResult {
   lock: Lockfile;
   /** one entry per conflicting key resolved by `conflicts: "scope"` (empty otherwise) */
   conflicts: ConflictReport[];
+  /** present when `dependencies` was requested */
+  dependencies?: DependencyReport;
   /** present when `graph` was requested */
   graph?: GraphReport;
 }

@@ -110,6 +110,40 @@ test("14. build --graph hashes the whole import graph into the map and the lock;
   assert.match(cut[0], /warning: the import graph of https:\/\/esm\.sh\/react@19\.2\.0\?target=es2022 was cut short at maxFiles 1 \(1 file\(s\) not hashed\)/);
 });
 
+test("16. build --dependencies adds a raw-CDN package's dependencies and says what it added; --dependency-depth bounds it", async () => {
+  const dir = await setup(`
+    const N = "https://registry.npmjs.org";
+    const pkg = (name, deps) => ({
+      [N + "/" + name]: { "dist-tags": { latest: "1.0.0" }, versions: { "1.0.0": {} } },
+      [N + "/" + name + "/1.0.0"]: { name, version: "1.0.0", type: "module", main: "index.js", dependencies: deps },
+    });
+    const fx = { ...pkg("safe-fragment", { dompurify: "^1", "from-git": "github:u/r" }), ...pkg("dompurify", { tiny: "1" }), ...pkg("tiny", {}) };
+    import { jsDelivr } from ${JSON.stringify(new URL("../src/core.mjs", import.meta.url).href)};
+    export default ({ lock }) => createRouter({ "*": jsDelivr() }, { fetch: fakeFetch(fx), probe: "none", lock });
+  `);
+  const read = async (f) => JSON.parse(await readFile(join(dir, f), "utf8"));
+
+  const plain = [];
+  await main(["build", "safe-fragment@1.0.0"], { cwd: dir, log: (s) => plain.push(s) });
+  assert.deepEqual(Object.keys((await read("importmap.json")).imports), ["safe-fragment"], "off by default");
+
+  const out = [];
+  await main(["build", "safe-fragment@1.0.0", "--dependencies", "--relock"], { cwd: dir, log: (s) => out.push(s) });
+  assert.deepEqual(Object.keys((await read("importmap.json")).imports), ["safe-fragment", "dompurify", "tiny"]);
+  assert.match(out[0], /^mport: dependency dompurify@\^1 \(needed by safe-fragment@1\.0\.0, depth 1\) -> https:\/\/cdn\.jsdelivr\.net\/npm\/dompurify@1\.0\.0\/index\.js$/);
+  assert.match(out[1], /dependency tiny@1 \(needed by dompurify@1\.0\.0, depth 2\)/);
+  assert.match(out[2], /warning: dependency from-git@github:u\/r of safe-fragment@1\.0\.0 was not added: not a registry range/);
+  assert.match(out.at(-1), /3 imports/);
+  assert.ok("tiny@1" in (await read("mport.lock.json")).packages, "added entries are locked");
+
+  const cut = [];
+  await main(["build", "safe-fragment@1.0.0", "--dependency-depth", "1", "--relock"], { cwd: dir, log: (s) => cut.push(s) });
+  assert.deepEqual(Object.keys((await read("importmap.json")).imports), ["safe-fragment", "dompurify"], "--dependency-depth alone turns it on");
+  assert.ok(cut.some((l) => /warning: dependency tiny@1 of dompurify@1\.0\.0 is deeper than --dependency-depth 1/.test(l)));
+
+  await assert.rejects(main(["build", "safe-fragment@1.0.0", "--dependency-depth", "x"], { cwd: dir, log() {} }), /--dependency-depth must be a non-negative integer/);
+});
+
 const upgradable = async (extra = "") => {
   const dir = await setup(`
     const fx = {

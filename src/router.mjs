@@ -18,6 +18,7 @@ import { fallback, HealthRegistry, SkipError, RoutingError, IntegrityError, note
 import { custom } from "./providers.mjs";
 import { compileImportMap } from "./importmap.mjs";
 import { planConflicts } from "./conflicts.mjs";
+import { addDependencies, DEFAULT_DEPENDENCY_DEPTH } from "./dependencies.mjs";
 import { walkGraph } from "./graph.mjs";
 import { createLock, lockKey } from "./lock.mjs";
 
@@ -276,9 +277,15 @@ export function createRouter(routes, options = {}) {
      * "scope" keeps the first and scopes the others to the packages that depend on them.
      * `graph`: also fetch each module, follow its static imports and record every file's
      * integrity (see graph.mjs); `true` or { maxFiles, maxDepth, dynamic, origins, algorithm }.
+     * `dependencies`: `true` / "prod" also adds each resolved package's manifest `dependencies` as
+     * routed entries when its provider serves raw files (see dependencies.mjs), at most
+     * `dependencyDepth` (default 5) levels deep; the result's `dependencies` reports what happened.
      */
-    async build(specifiers, { scopes = {}, signal, conflicts = "error", graph = false } = {}) {
+    async build(specifiers, { scopes = {}, signal, conflicts = "error", graph = false, dependencies = false, dependencyDepth = DEFAULT_DEPENDENCY_DEPTH } = {}) {
       if (conflicts !== "error" && conflicts !== "scope") throw new TypeError(`mport: build option conflicts must be "error" or "scope", got ${JSON.stringify(conflicts)}`);
+      if (dependencies !== false && dependencies !== true && dependencies !== "prod") throw new TypeError(`mport: build option dependencies must be false, true or "prod", got ${JSON.stringify(dependencies)}`);
+      if (!Number.isInteger(dependencyDepth) || dependencyDepth < 0) throw new TypeError(`mport: build option dependencyDepth must be a non-negative integer, got ${JSON.stringify(dependencyDepth)}`);
+      if (dependencies && typeof registry.manifest !== "function") throw new TypeError("mport: build option dependencies needs a registry client with manifest(name, version)");
       let resolved = await Promise.all(specifiers.map(async (s) => {
         const r = await resolve(s, { signal });
         if (r === null) throw new ResolutionError(`mport: no route for "${s}" (relative, URL, non-package or unmatched specifier)`);
@@ -293,6 +300,18 @@ export function createRouter(routes, options = {}) {
             return { ...r, key };
           }),
         );
+      }
+      let dependencyReport;
+      if (dependencies) {
+        ({ resolved, report: dependencyReport } = await addDependencies(resolved, {
+          resolve,
+          manifest: registry.manifest.bind(registry),
+          isRaw: (r) => providerOf(r)?.capabilities?.includes("raw") ?? false,
+          versionOf: (r) => exactVersion(r),
+          maxDepth: dependencyDepth,
+          signal,
+          emit: (e) => { try { onEvent?.({ provider: "build", phase: "dependencies", ...e, at: now() }); } catch {} },
+        }));
       }
       let report = [];
       if (conflicts === "scope") {
@@ -317,6 +336,7 @@ export function createRouter(routes, options = {}) {
         importMap: compileImportMap(resolved, scoped, { integrity: files }),
         lock: lock.toJSON(),
         conflicts: report,
+        ...(dependencyReport && { dependencies: dependencyReport }),
         ...(graphReport && { graph: graphReport }),
       };
     },
@@ -356,6 +376,21 @@ export function createRouter(routes, options = {}) {
       if (rec) lock.set(key, { ...rec, integrity: entry });
     }
     return { files: Object.fromEntries(files), report: { files: files.size, truncated, bare: [...bare].sort(), skipped: [...notFetched, ...skipped] } };
+  }
+
+  /** The provider node that served a Resolution. */
+  function providerOf(r) {
+    for (const { node } of table) for (const n of walk(node)) if (n.kind === "provider" && n.name === r.provider) return n;
+    return undefined;
+  }
+
+  /** The exact version of a Resolution: its own, or the one the lock recorded when the provider needs none (local()). */
+  function exactVersion(r) {
+    if (r.version && valid(r.version)) return r.version;
+    try {
+      const recorded = lock.get(lockKey(parseSpecifier(r.specifier)))?.version;
+      return recorded && valid(recorded) ? recorded : undefined;
+    } catch { return undefined; }
   }
 
   /** The directory URL of the package a Resolution points into (what an import-map scope is keyed by). */

@@ -310,6 +310,18 @@ const { importMap, lock, graph } = await router.build(["react@^19"], { graph: { 
 
 `mport build --graph [--max-files N] [--max-depth N]` does the same from the CLI. It is a build-time download of everything, a tokenizer-level parser and same-origin only; see [the limits](docs/api.md#whole-graph-integrity-graph).
 
+### Packages that import their own dependencies: `dependencies`
+
+A raw file CDN (jsDelivr, unpkg) or `local()` serves a package's files as published, so a package that does `import("dompurify")` keeps that bare specifier, and the browser resolves it through **your** import map, which holds only what you listed. `build(specifiers, { dependencies: true })` reads each resolved package's manifest and routes its `dependencies` as entries of their own:
+
+```js
+const { importMap, dependencies } = await router.build(["safe-fragment@1"], { dependencies: true });
+// importMap.imports: safe-fragment, dompurify (at a version satisfying safe-fragment's range), …
+// dependencies: { added: [{ specifier, from, range, depth, url, … }], skipped: [...], truncated: [...] }
+```
+
+Ranges are respected and a range an existing entry does not satisfy meets the normal `conflicts` handling; it follows dependencies of dependencies up to `dependencyDepth` (default 5) and reports what it added, skipped (a `file:` or `github:` range, a dependency a raw CDN cannot serve) and cut off. **esm.sh and jsDelivr `+esm` are not expanded**: they rewrite a module's imports to URLs themselves, so the map needs nothing more for them. Only `dependencies` count, not dev, peer or optional ones. CLI: `mport build --dependencies [--dependency-depth N]`. Details: [docs/api.md](docs/api.md#including-dependencies-dependencies); [example 19](examples/19-dependencies-of-a-raw-cdn-package-join-the-map.mjs).
+
 ### Content-Security-Policy for the inline import map
 
 A server that renders each response can put a nonce on the import map (`renderImportMap(map, { nonce })`). A **static site** cannot, and can allow the inline `<script type="importmap">` only by the hash of its exact text. mport owns that text, so it computes the hash:
@@ -452,7 +464,7 @@ Every export, from `@johnhenry/mport` (all of them), `@johnhenry/mport/firefox` 
 | [`createRouter`](docs/api.md#createrouter) | `(routes, options?) → Router` | Build a router. Options: `probe`, `lock`, `resolveVersions`, `circuitBreaker`, `health`, `target`, `capabilities`, `fetch`, `importer`, `registries`, `registry`, `onEvent`, `now`, `allowCommonJS`, `name` |
 | [`router.resolve`](docs/api.md#routerresolve) | `(specifier, options?) → Promise<Resolution \| null>` | Resolve one specifier. Options: `signal`, `exclude`, `build`, `integrity`, `target`, `capabilities`, `relock`, `onEvent` |
 | [`router.import`](docs/api.md#routerimport) | `(specifier, options?) → Promise<module>` | Resolve and import, failing over when the import fails |
-| [`router.build`](docs/api.md#routerbuild) | `(specifiers, { scopes?, conflicts?, graph?, signal? }?) → Promise<{ importMap, lock, conflicts, graph? }>` | Resolve many and compile an import map and lockfile; `conflicts: "scope"` scopes conflicting versions per dependent; `graph` hashes every file of each module's import graph |
+| [`router.build`](docs/api.md#routerbuild) | `(specifiers, { scopes?, conflicts?, graph?, dependencies?, dependencyDepth?, signal? }?) → Promise<{ importMap, lock, conflicts, dependencies?, graph? }>` | Resolve many and compile an import map and lockfile; `conflicts: "scope"` scopes conflicting versions per dependent; `graph` hashes every file of each module's import graph; `dependencies` adds raw-CDN packages' manifest dependencies |
 | `router.health`, `router.lock`, `router.name` | | The router's [`HealthRegistry`](docs/api.md#healthregistry), its in-memory lock, its name |
 | [`route`](docs/api.md#route) | `(match, use) → { match, use }` | One array-form route |
 | [`esmSh`, `jsDelivr`, `unpkg`, `jspm`, `jsr`, `github`, `local`](docs/api.md#built-in-providers) | `(options?) → Provider` | Built-in providers |
@@ -526,7 +538,7 @@ The default race still mixes builds (raw jsDelivr/unpkg files against jspm's tra
 
 ## Examples
 
-[`examples/README.md`](examples/README.md) indexes them all. Eighteen numbered Node examples prove one behaviour each, offline, against a fake network (`npm run examples`, or `npm run example:05` for one): range resolution, fallback, race, CommonJS skipping, lockfile pinning, the circuit breaker, `verified()`, `router.import()` failover, `build()`, the CLI, the 1.x race, server-rendered import maps, conflicting versions scoped per dependent, whole-graph integrity, `outdated`/`update`, the Rollup plugin, `local()` serving a package that is not on npm, and the CSP hash of an import map.
+[`examples/README.md`](examples/README.md) indexes them all. Nineteen numbered Node examples prove one behaviour each, offline, against a fake network (`npm run examples`, or `npm run example:05` for one): range resolution, fallback, race, CommonJS skipping, lockfile pinning, the circuit breaker, `verified()`, `router.import()` failover, `build()`, the CLI, the 1.x race, server-rendered import maps, conflicting versions scoped per dependent, whole-graph integrity, `outdated`/`update`, the Rollup plugin, `local()` serving a package that is not on npm, the CSP hash of an import map, and a raw-CDN package's dependencies joining the map.
 
 Three browser pages share one header, one timeline and one way of explaining results:
 
@@ -559,7 +571,7 @@ The pages talk to the real CDNs and registries; outages, latency and tampering a
 
 ## Honest limitations
 
-- **Raw file CDNs serve packages exactly as published.** A CommonJS entry can't be imported by a browser, and mport's detection of CommonJS is a heuristic over `package.json` (file extension, `type`, `module`, export conditions, naming conventions): a `.js` ES module with none of those signals is skipped, and a CommonJS file that looks like ESM is served. Raw ES modules also keep their own bare imports (`import "preact"`), which only resolve if the page's import map covers them; ESM-transforming CDNs (esm.sh, jsDelivr `+esm`) rewrite those. Permanent: it follows from what raw CDNs are.
+- **Raw file CDNs serve packages exactly as published.** A CommonJS entry can't be imported by a browser, and mport's detection of CommonJS is a heuristic over `package.json` (file extension, `type`, `module`, export conditions, naming conventions): a `.js` ES module with none of those signals is skipped, and a CommonJS file that looks like ESM is served. Raw ES modules also keep their own bare imports (`import "preact"`), which only resolve if the page's import map covers them (`build(…, { dependencies: true })` adds the ones a manifest declares); ESM-transforming CDNs (esm.sh, jsDelivr `+esm`) rewrite those. Permanent: it follows from what raw CDNs are.
 - **Import maps have no runtime fallback.** The platform lets a specifier map to one URL and gives no hook to retry when that fetch fails, so a map built with `startup()` or the CLI is only as available as the mirror it chose. Failover after page load exists only for loads that go through `router.import()` / `createImporter()`, and switching builds at runtime only works when the new build's own imports resolve. Permanent until import maps grow a fallback mechanism.
 - **A probe proves availability, not correctness.** `probe: "head"` learns that a URL answers, not that it is an ES module that will evaluate; `probe: "none"` checks nothing and records no health; `resolveVersions: false` hands the CDN a range it resolves on its own (so providers that need an entry file, the raw CDNs, skip a range and fall through). `verified()` hashes the entry module only; `build(…, { graph: true })` hashes the modules it imports in turn too. Either checks bytes only against a hash you already have: without a pinned `integrity` it records whatever the first mirror served (trust on first use). By design: stronger checks cost a download per candidate.
 - **Firefox ignores an import map added after any module has loaded** (155, and still in the browser tests), so `startup()` and `injectImportMap()` work in Chromium and WebKit only; there `startup()` rejects with an explanatory error. A map in the HTML (`renderImportMap()`) or `createImporter()` works in all three. Permanent until Firefox ships multiple/late import maps; a browser test fails the day it does.
