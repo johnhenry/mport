@@ -10,7 +10,7 @@ const router = createRouter({ "*": esmSh(), "@std/*": jsr() }, { fetch, probe: "
 
 const react = await router.resolve("react@^19");
 assert.equal(react.version, "19.2.0");
-assert.equal(react.url, "https://esm.sh/react@19.2.0");
+assert.equal(react.url, "https://esm.sh/react@19.2.0?target=es2022");
 assert.deepEqual(show(react.trace), ["lookup:npm registry", "resolved:npm registry", "selected:esm.sh"]);
 
 const exact = await router.resolve("react@18.3.1");
@@ -25,6 +25,6 @@ assert.deepEqual(router.health.snapshot(), {});
 const path = await router.resolve("@std/path@^1");
 assert.equal(path.registry, "jsr");
 assert.equal(path.version, "1.1.0", "yanked 1.2.0 is ignored");
-assert.equal(path.url, "https://esm.sh/jsr/@std/path@1.1.0");
+assert.equal(path.url, "https://esm.sh/jsr/@std/path@1.1.0?target=es2022");
 
 console.log("01 ok:", react.url, "|", path.url);

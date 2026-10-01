@@ -211,7 +211,7 @@ Builds one array-form entry.
 |---|---|---|---|
 | `probe` | `"head" \| "import" \| "none" \| function` | `"head"` | How a candidate URL is checked. See [Probing](#probing). |
 | `lock` | `Lockfile` | none | A lockfile whose entries pin version, entry, build and integrity. See [Lockfiles](#lockfiles). |
-| `resolveVersions` | `boolean` | `true` | Resolve ranges to exact versions through the registries. With `false`, providers get the range (or nothing) as written, e.g. `https://esm.sh/react@^19`; exact versions and lockfile pins still apply. Providers that need an entry file (`needsEntry`: jsDelivr raw, unpkg, jspm, `local()`) can't look one up for a range, so they **skip** with a reason (`needs an exact version to find its entry file…`) and the route falls through to e.g. esm.sh; an exact version or a lockfile pin still gets an entry. |
+| `resolveVersions` | `boolean` | `true` | Resolve ranges to exact versions through the registries. With `false`, providers get the range (or nothing) as written, e.g. `https://esm.sh/react@^19?target=es2022`; exact versions and lockfile pins still apply. Providers that need an entry file (`needsEntry`: jsDelivr raw, unpkg, jspm, `local()`) can't look one up for a range, so they **skip** with a reason (`needs an exact version to find its entry file…`) and the route falls through to e.g. esm.sh; an exact version or a lockfile pin still gets an entry. |
 | `circuitBreaker` | `{ failures?, reset? }` | `{ failures: 3, reset: 30000 }` | Options for this router's own [`HealthRegistry`](#healthregistry). Ignored when `health` is given. |
 | `health` | `HealthRegistry` | a new one | Share health and open circuits with another router (`health: other.health`). |
 | `target` | `string` | `"browser"` | Default target for [`prefer()`](#prefer). |
@@ -396,15 +396,15 @@ Then the URL is built and [probed](#probing).
 
 | Factory | `name` | `build` | Registries | Capabilities | needsEntry | URL shape |
 |---|---|---|---|---|---|---|
-| `esmSh({ origin?, name? })` | `esm.sh` | `esm.sh` | npm, jsr, github | browser, esm-transform, types | no | `https://esm.sh/[jsr/\|gh/]<name>[@<version>][/<path>]` |
+| `esmSh({ origin?, name?, esTarget? = "es2022" })` | `esm.sh` | `esm.sh` | npm, jsr, github | browser, esm-transform, types | no | `https://esm.sh/[jsr/\|gh/]<name>[@<version>][/<path>][?target=<esTarget>]` |
 | `jsDelivr({ origin?, name? })` | `jsdelivr` | `npm` | npm, github | raw | yes | `https://cdn.jsdelivr.net/<npm\|gh>/<name>[@<version>]/<entry or path>` |
 | `jsDelivr({ esm: true, origin?, name? })` | `jsdelivr-esm` | `jsdelivr-esm` | npm | browser, esm-transform | no | `https://cdn.jsdelivr.net/npm/<name>[@<version>][/<path>]/+esm` (skips prefix specifiers) |
 | `unpkg({ origin?, name? })` | `unpkg` | `npm` | npm | raw | yes | `https://unpkg.com/<name>[@<version>]/<entry or path>` |
 | `jspm({ origin?, name? })` | `jspm` | `jspm` | npm | browser, esm-transform | yes | `https://ga.jspm.io/npm:<name>[@<version>]/<entry or path>` |
-| `jsr({ origin?, name? })` | `jsr` | `esm.sh` | jsr | browser, esm-transform, types | no | `https://esm.sh/jsr/<name>[@<version>][/<path>]` |
+| `jsr({ origin?, name?, esTarget? })` | `jsr` | `esm.sh` | jsr | browser, esm-transform, types | no | `https://esm.sh/jsr/<name>[@<version>][/<path>][?target=<esTarget>]` |
 | `jsr({ via: "jsr.io", origin?, name? })` | `jsr` | `jsr` | jsr | types, deno | no | `https://jsr.io/<name>/<version>/<path>`; throws without a path |
 | `github({ name? })` | `github` | `npm` | github | raw | no | `https://cdn.jsdelivr.net/gh/<user>/<repo>[@<ref>]/<path>` |
-| `github({ via: "esm.sh", name? })` | `github` | `esm.sh` | github | browser, esm-transform, types | no | `https://esm.sh/gh/<user>/<repo>[@<ref>][/<path>]` |
+| `github({ via: "esm.sh", name?, esTarget? })` | `github` | `esm.sh` | github | browser, esm-transform, types | no | `https://esm.sh/gh/<user>/<repo>[@<ref>][/<path>][?target=<esTarget>]` |
 | `local({ base?, name?, build? })` | `local` | `npm` | npm | raw, offline | yes | `<base>/<name>/<entry or path>`, `base` default `/node_modules/`; no version (`needsVersion: false`) |
 | `custom(template, opts?)` | the template's host | the template's host | npm | none | with `{entry}` | see [custom()](#custom) |
 | `origin(o)` | `o.path` | `o.path` | npm | none | no | `https://<path><name><versionMarker><version>/<path>`; see [origin()](#origin) |
@@ -418,6 +418,16 @@ Notes that follow from the table:
 
 - `jspm()` is treated as a raw file CDN for entry lookup (it needs an entry), so
   CommonJS entries are skipped on it too, although ga.jspm.io transforms packages.
+- **esm.sh builds for the requester's User-Agent unless given a target**, so an unpinned
+  URL can serve different bytes to Chrome and to Safari and break a pinned `integrity`
+  hash. `esmSh()` therefore adds `?target=es2022` (`esTarget`, also on `jsr()` and
+  `github({ via: "esm.sh" })`; `esTarget: null` leaves it to esm.sh). A **prefix** mapping
+  (`lit/`) points at a directory, which can't carry a query, so it stays unpinned.
+- **Integrity covers the entry module only.** `verified()` hashes the one URL it selected.
+  The modules that file imports in turn (esm.sh's rewritten `/react@19.2.0/es2022/react.mjs`
+  chains, dependencies of a raw file) are fetched by the browser without an integrity
+  check unless you add them to the import map's `integrity` yourself; the hash proves the
+  entry file's bytes, not the whole dependency graph.
 - `jsr()` defaults to esm.sh's build, so it and `esmSh()` are mirrors of each other.
 - `github()` defaults to jsDelivr's `"npm"` build, so it can stand in for other raw mirrors
   of a GitHub-hosted package only if they serve the same files.
@@ -723,7 +733,7 @@ are exported, so `instanceof` works; `error.name` is the class name.
     "react@^19": {
       "specifier": "react@^19", "registry": "npm", "name": "react", "range": "^19",
       "version": "19.2.0", "build": "esm.sh", "provider": "esm.sh",
-      "url": "https://esm.sh/react@19.2.0", "integrity": "sha384-…"
+      "url": "https://esm.sh/react@19.2.0?target=es2022", "integrity": "sha384-…"
     }
   }
 }

@@ -330,12 +330,13 @@ export interface ProviderDefinition {
 }
 
 export function provider(def: ProviderDefinition): Provider;
-export function esmSh(o?: { origin?: string; name?: string }): Provider;
+/** `esTarget`: the `?target=` esm.sh is pinned to so bytes (and integrity) don't vary by User-Agent (default "es2022"; null: don't pin) */
+export function esmSh(o?: { origin?: string; name?: string; esTarget?: string | null }): Provider;
 export function jsDelivr(o?: { origin?: string; esm?: boolean; name?: string }): Provider;
 export function unpkg(o?: { origin?: string; name?: string }): Provider;
 export function jspm(o?: { origin?: string; name?: string }): Provider;
-export function jsr(o?: { via?: "esm.sh" | "jsr.io"; origin?: string; name?: string }): Provider;
-export function github(o?: { via?: "jsdelivr" | "esm.sh"; name?: string }): Provider;
+export function jsr(o?: { via?: "esm.sh" | "jsr.io"; origin?: string; name?: string; esTarget?: string | null }): Provider;
+export function github(o?: { via?: "jsdelivr" | "esm.sh"; name?: string; esTarget?: string | null }): Provider;
 export function local(o?: { base?: string; name?: string; build?: string }): Provider;
 export function custom(template: string, o?: { name?: string; build?: string; registries?: Registry[]; capabilities?: string[] }): Provider;
 export function origin(o: string | MPortOrigin): Provider;

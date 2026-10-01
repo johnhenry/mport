@@ -37,7 +37,7 @@ test("2. resolveVersions:false skips entry-needing providers instead of asking t
   const router = createRouter({ "*": [jsDelivr(), unpkg(), esmSh()] }, { fetch, resolveVersions: false });
   const r = await router.resolve("react@^19");
   assert.equal(r.provider, "esm.sh");
-  assert.equal(r.url, "https://esm.sh/react@^19");
+  assert.equal(r.url, "https://esm.sh/react@^19?target=es2022");
   const skips = r.trace.filter((e) => e.type === "skip");
   assert.equal(skips.length, 2);
   assert.match(skips[0].reason, /exact version/);
@@ -118,7 +118,7 @@ test("7. two versions of one key throw instead of silently keeping one", async (
   });
   // the same URL twice, and the scopes the message points to, are fine
   const ok2 = await router.build(["react@^19", "react@19.2.0"], { scopes: { "https://old.example/": { react: "react@18.3.1" } } });
-  assert.deepEqual(ok2.importMap.imports, { react: "https://esm.sh/react@19.2.0" });
+  assert.deepEqual(ok2.importMap.imports, { react: "https://esm.sh/react@19.2.0?target=es2022" });
   // inside one scope the same rule applies
   assert.throws(() => compileImportMap([], { "/x/": [{ key: "a", url: "u1" }, { key: "a", url: "u2" }] }), /in scope \/x\//);
 });
@@ -193,4 +193,16 @@ test("13. router.import() failures and a fallback's circuit share one state", as
   const r = await router.resolve("react@19.2.0").catch((e) => e);
   assert.equal(r.name, "RoutingError");
   assert.ok(r.trace.some((e) => e.reason === "circuit open"), "one failed import opened the fallback's 1-failure circuit");
+});
+
+test("14a. esm.sh URLs pin ?target= (integrity can't depend on the User-Agent); null opts out; prefixes stay bare", async () => {
+  const fetch = fakeFetch({ ...registryFixtures });
+  const r = createRouter({ "*": esmSh() }, { fetch, probe: "none" });
+  assert.equal((await r.resolve("react@19.2.0/jsx-runtime")).url, "https://esm.sh/react@19.2.0/jsx-runtime?target=es2022");
+  assert.equal((await r.resolve("jsr:@std/path@1.0.0")).url, "https://esm.sh/jsr/@std/path@1.0.0?target=es2022");
+  assert.equal((await r.resolve("lit/")).base, "https://esm.sh/lit@3.3.1/", "a directory can't carry a query");
+  const es2020 = createRouter({ "*": esmSh({ esTarget: "es2020" }) }, { fetch, probe: "none" });
+  assert.equal((await es2020.resolve("react@19.2.0")).url, "https://esm.sh/react@19.2.0?target=es2020");
+  const bare = createRouter({ "*": esmSh({ esTarget: null }) }, { fetch, probe: "none" });
+  assert.equal((await bare.resolve("react@19.2.0")).url, "https://esm.sh/react@19.2.0");
 });

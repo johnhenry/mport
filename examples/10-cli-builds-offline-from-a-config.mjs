@@ -31,9 +31,9 @@ try {
   assert.match(stdout, /wrote importmap\.json \(3 imports\) and mport\.lock\.json/);
   const map = JSON.parse(await readFile(join(dir, "importmap.json"), "utf8"));
   assert.deepEqual(map.imports, {
-    react: "https://esm.sh/react@19.2.0",
+    react: "https://esm.sh/react@19.2.0?target=es2022",
     "lit/": "https://esm.sh/lit@3.3.1/",
-    "@std/path": "https://esm.sh/jsr/@std/path@1.1.0",
+    "@std/path": "https://esm.sh/jsr/@std/path@1.1.0?target=es2022",
   });
 
   // Edit the lockfile by hand: the next resolve honours the pin.
@@ -42,7 +42,7 @@ try {
   lock.packages["react@^19"].version = "19.0.0";
   await writeFile(lockPath, JSON.stringify(lock));
   const resolved = JSON.parse((await run("resolve", "react@^19", "--trace")).stdout);
-  assert.equal(resolved.url, "https://esm.sh/react@19.0.0");
+  assert.equal(resolved.url, "https://esm.sh/react@19.0.0?target=es2022");
   assert.ok(!resolved.trace.some((e) => e.type === "lookup"), "no registry lookup for a pinned version");
 
   // --relock ignores it.

@@ -15,14 +15,14 @@ const { importMap, lock } = await router.build(
 );
 assert.deepEqual(importMap, {
   imports: {
-    "react": "https://esm.sh/react@19.2.0",
-    "react/jsx-runtime": "https://esm.sh/react@19.2.0/jsx-runtime",
+    "react": "https://esm.sh/react@19.2.0?target=es2022",
+    "react/jsx-runtime": "https://esm.sh/react@19.2.0/jsx-runtime?target=es2022",
     // lit has an exports map, so raw jsDelivr skips the "lit/" directory mapping (its subpaths would 404)
     "lit/": "https://esm.sh/lit@3.3.1/",
-    "npm:preact": "https://esm.sh/preact@10.29.8",
-    "@std/path": "https://esm.sh/jsr/@std/path@1.1.0",
+    "npm:preact": "https://esm.sh/preact@10.29.8?target=es2022",
+    "@std/path": "https://esm.sh/jsr/@std/path@1.1.0?target=es2022",
   },
-  scopes: { "https://legacy.example.com/": { react: "https://esm.sh/react@18.3.1" } },
+  scopes: { "https://legacy.example.com/": { react: "https://esm.sh/react@18.3.1?target=es2022" } },
 });
 // Lockfile keys are the specifiers as written (prefix only if you wrote one, no
 // trailing "/"); `registry` says which registry actually served each one.

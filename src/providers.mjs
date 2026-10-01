@@ -40,18 +40,24 @@ export function provider({
   };
 }
 
-export const esmSh = ({ origin = "https://esm.sh", name = "esm.sh" } = {}) =>
-  provider({
+// esm.sh builds for the requester's User-Agent unless told a target, so an unpinned URL
+// serves different bytes to different browsers and breaks a pinned integrity hash.
+// `esTarget` pins it (`?target=es2022`); `null` leaves esm.sh to choose.
+export const esmSh = ({ origin = "https://esm.sh", name = "esm.sh", esTarget = "es2022" } = {}) => {
+  const root = (a) => {
+    const reg = a.registry === "jsr" ? "jsr/" : a.registry === "github" ? "gh/" : "";
+    return `${origin}/${reg}${a.name}${a.version ? `@${a.version}` : ""}`;
+  };
+  return provider({
     name,
     build: "esm.sh",
     registries: ["npm", "jsr", "github"],
     capabilities: ["browser", "esm-transform", "types"],
-    url: (a) => {
-      const reg = a.registry === "jsr" ? "jsr/" : a.registry === "github" ? "gh/" : "";
-      const ver = a.version ? `@${a.version}` : "";
-      return `${origin}/${reg}${a.name}${ver}${a.path ? `/${a.path}` : ""}`;
-    },
+    url: (a) => `${root(a)}${a.path ? `/${a.path}` : ""}${esTarget ? `?target=${esTarget}` : ""}`,
+    // a directory can't carry a query, so prefix mappings stay unpinned
+    base: (a) => `${root(a)}/`,
   });
+};
 
 export const jsDelivr = ({ origin = "https://cdn.jsdelivr.net", esm = false, name } = {}) =>
   provider({
@@ -88,7 +94,7 @@ export const jspm = ({ origin = "https://ga.jspm.io", name = "jspm" } = {}) =>
   });
 
 /** JSR packages, served browser-ready through esm.sh by default. */
-export const jsr = ({ via = "esm.sh", origin, name = "jsr" } = {}) => {
+export const jsr = ({ via = "esm.sh", origin, name = "jsr", esTarget } = {}) => {
   if (via === "jsr.io") {
     const o = origin ?? "https://jsr.io";
     return provider({
@@ -102,13 +108,13 @@ export const jsr = ({ via = "esm.sh", origin, name = "jsr" } = {}) => {
       },
     });
   }
-  return { ...esmSh({ origin: origin ?? "https://esm.sh", name }), registries: ["jsr"] };
+  return { ...esmSh({ origin: origin ?? "https://esm.sh", name, ...(esTarget !== undefined && { esTarget }) }), registries: ["jsr"] };
 };
 
 /** GitHub repositories (`github:user/repo@ref/path`), via jsDelivr or esm.sh. */
-export const github = ({ via = "jsdelivr", name = "github" } = {}) =>
+export const github = ({ via = "jsdelivr", name = "github", esTarget } = {}) =>
   via === "esm.sh"
-    ? { ...esmSh({ name }), registries: ["github"] }
+    ? { ...esmSh({ name, ...(esTarget !== undefined && { esTarget }) }), registries: ["github"] }
     : { ...jsDelivr({ name }), registries: ["github"], needsEntry: false };
 
 /** Files served by your own origin, e.g. a vendored node_modules. */

@@ -12,7 +12,7 @@ test("1. static routing with deterministic version resolution", async () => {
   const fetch = fakeFetch({ ...registryFixtures });
   const router = createRouter({ "*": esmSh() }, { fetch, probe: "none" });
   const r = await router.resolve("react@^19");
-  assert.equal(r.url, "https://esm.sh/react@19.2.0");
+  assert.equal(r.url, "https://esm.sh/react@19.2.0?target=es2022");
   assert.equal(r.version, "19.2.0");
   assert.equal(r.provider, "esm.sh");
   assert.equal((await router.resolve("react")).version, "19.2.0", "latest dist-tag");
@@ -36,7 +36,7 @@ test("array routes: first match wins; unmatched and relative specifiers → null
   const router = createRouter([route("@std/*", jsr()), route("react", esmSh())], { probe: "none", fetch: fakeFetch(registryFixtures) });
   assert.equal(await router.resolve("lit"), null);
   assert.equal(await router.resolve("./local.js"), null);
-  assert.equal((await router.resolve("jsr:@std/path@^1")).url, "https://esm.sh/jsr/@std/path@1.1.0");
+  assert.equal((await router.resolve("jsr:@std/path@^1")).url, "https://esm.sh/jsr/@std/path@1.1.0?target=es2022");
 });
 
 test("raw CDNs resolve the entry file from exports → module → main", async () => {
@@ -49,7 +49,7 @@ test("raw CDNs resolve the entry file from exports → module → main", async (
 
 test("registry prefixes route to registry-aware providers", async () => {
   const router = createRouter({ "npm:*": esmSh(), "jsr:*": jsr(), "github:*": github() }, { probe: "none", fetch: fakeFetch(registryFixtures) });
-  assert.equal((await router.resolve("npm:react@19.2.0")).url, "https://esm.sh/react@19.2.0");
+  assert.equal((await router.resolve("npm:react@19.2.0")).url, "https://esm.sh/react@19.2.0?target=es2022");
   assert.equal((await router.resolve("github:johnhenry/mport@v2/src/index.mjs")).url, "https://cdn.jsdelivr.net/gh/johnhenry/mport@v2/src/index.mjs");
 });
 
@@ -108,7 +108,7 @@ test("lock pins versions without touching the registry", async () => {
   const fetch = fakeFetch({ ...ok("https://esm.sh/") }, { log });
   const lock = { packages: { "react@^19": { version: "19.0.0", build: "esm.sh" } } };
   const r = await createRouter({ "*": esmSh() }, { fetch, lock }).resolve("react@^19");
-  assert.equal(r.url, "https://esm.sh/react@19.0.0");
+  assert.equal(r.url, "https://esm.sh/react@19.0.0?target=es2022");
   assert.ok(!log.some((l) => l.url.includes("registry.npmjs.org")));
 });
 
@@ -228,7 +228,7 @@ test("raw CDNs map sub-paths through package exports", async () => {
   assert.equal((await router.resolve("preact@^10/compat/client")).url, "https://cdn.jsdelivr.net/npm/preact@10.29.8/compat/dist/client.mjs", "wildcard");
   assert.equal((await router.resolve("preact@^10/dist/preact.js")).url, "https://cdn.jsdelivr.net/npm/preact@10.29.8/dist/preact.js", "file paths are left alone");
   const esm = createRouter({ "*": esmSh() }, { probe: "none", fetch: fakeFetch(registryFixtures) });
-  assert.equal((await esm.resolve("preact@^10/hooks")).url, "https://esm.sh/preact@10.29.8/hooks", "esm.sh resolves sub-paths itself");
+  assert.equal((await esm.resolve("preact@^10/hooks")).url, "https://esm.sh/preact@10.29.8/hooks?target=es2022", "esm.sh resolves sub-paths itself");
 });
 
 test("routers can share a health registry", async () => {
