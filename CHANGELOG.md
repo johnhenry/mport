@@ -115,6 +115,42 @@ All additive; the one behaviour that changed is that `startup()` can now reject 
   error carrying the build result. `examples/app.html` says so. Chromium and WebKit are
   unaffected, and `createImporter()` or a map in the HTML works everywhere. In 7b6ba06 and ca8f0e3.
 
+### Unpublished packages, CSP hashes, dependency expansion, app prefixes (johnhenry/mport#1, #2)
+
+All additive.
+
+- **`local()` can serve a package that is not on npm: `installedRegistry({ root })` from
+  `@johnhenry/mport/node`** (new, Node only). `local()` resolved the version and entry through the
+  npm registry, so a package installed from git was a 404 and a published one was served at the
+  registry's `latest`. The registry client reads `<root>/<name>/package.json` instead, so the
+  installed version, `exports` and manifest win; a range the installed copy does not satisfy is a
+  `ResolutionError`, and `fallback` can send uninstalled packages to a real registry. A registry
+  client rather than a `local({ packageRoot })` option, so `src/` stays free of `node:` imports
+  and `conflicts: "scope"` and `dependencies` read the same manifests. Example 17. Fixes #1 in
+  4839b5b.
+- **`importMapHash()`, `renderImportMapCsp()`, `cspHash()` and `importMapText()`: the CSP hash of
+  the inline import map**, for static sites that cannot use a nonce. One serialisation
+  (`importMapText`) now backs `renderImportMap()`, `injectImportMap()` (which used a plain
+  `JSON.stringify`, without the `<`/U+2028/U+2029 escapes) and the Vite plugin, so one
+  `'sha256-…'` allows the map however it reaches the page; `injectImportMap()` also takes a
+  `nonce`, and the Vite plugin's `api.importMapHash()` hashes what it injects. Verified byte for
+  byte against `node:crypto` and by Chromium and WebKit enforcing a strict policy (the map is
+  allowed by mport's hash, blocked by a wrong one). Example 18. Fixes #2 in 8ccef5e.
+- **`build(specs, { dependencies: true | "prod", dependencyDepth })` adds a raw-CDN package's
+  manifest `dependencies` to the map.** jsDelivr, unpkg and `local()` serve files as published, so
+  `import("dompurify")` inside a package only works if the map has it (found auditing
+  safe-fragment). Dependencies are routed like any specifier at the dependent's range, locked,
+  followed to `dependencyDepth` (default 5), and reported in `result.dependencies` (`added`,
+  `skipped`, `truncated`) and as `onEvent` events; a range the existing entry does not satisfy
+  meets `conflicts`. esm.sh and jsDelivr `+esm` rewrite their own imports and are not expanded
+  (the docs say why). CLI: `mport build --dependencies [--dependency-depth N]`. Example 19. In
+  4ed82c5.
+- **Recipe: an app-owned prefix**, `custom("/components/{path}", { name: "app", build: "app" })`,
+  needs no registry lookup (documented, example 20). Found while writing it: a directory
+  specifier such as `components/` was matched only as `components`, so a `"components/*"` route
+  skipped it and the registry was asked about a package of that name; it is now also matched as
+  written. In d2b2f9b.
+
 ### Audit fixes (breaking changes, since 0.0.0 is unreleased)
 
 - **The circuit breaker trips for a mirror that passes the probe but fails to import.**
