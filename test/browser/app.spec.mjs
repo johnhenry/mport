@@ -4,7 +4,7 @@ import { installStubs } from "./stubs.mjs";
 // examples/app.html loads a real Preact + htm app, either through an injected import map
 // (startup) or through router.import() (runtime), with esm.sh up, down, or up-but-broken.
 const CASES = [
-  // [mode, esm, works]
+  // [mode, esm, the app runs]
   ["startup", "up", true],
   ["startup", "down", true],
   ["startup", "breaks", false], // an import map has no fallback
@@ -18,12 +18,17 @@ test.describe("app.html", () => {
     await installStubs(context);
   });
 
-  for (const [mode, esm, works] of CASES) {
-    test(`${mode} mode, esm.sh ${esm}: ${works ? "the app runs" : "the app cannot load (no fallback)"}`, async ({ page }) => {
+  for (const [mode, esm, expected] of CASES) {
+    test(`${mode} mode, esm.sh ${esm}: ${expected === true ? "the app runs" : "the app cannot load"}`, async ({ page, browserName }) => {
+      // Firefox ignores an import map added after a module has loaded, so startup mode cannot work there
+      // (the page says so; see the "late import maps" test in runtime.spec.mjs).
+      const ignoredMap = mode === "startup" && esm !== "breaks" && browserName === "firefox";
+      const works = ignoredMap ? false : expected;
       await page.goto(`/examples/app.html?mode=${mode}&esm=${esm}`);
       const outcome = page.locator("#outcome");
       await expect(outcome).toBeVisible();
       await expect(outcome).toHaveClass(works ? /good/ : /bad/);
+      if (ignoredMap) await expect(outcome).toContainText("ignored the import map");
       if (works) {
         await expect(page.locator("#app .todo")).toHaveCount(2);
         await page.getByLabel("New todo").fill("write a browser test");

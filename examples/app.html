@@ -105,7 +105,13 @@ await import("./app-main.mjs");                 // import { h, render } from "pr
       outcome(false, "Some packages couldn't be resolved, so the app can't start.");
     } else {
       injectImportMap(importMap);
-      try {
+      // Firefox ignores an import map added after any module has loaded (this page is a module that
+      // already imported mport). import.meta.resolve() applies the current map, so ask it.
+      const honoured = (() => { try { return import.meta.resolve("preact") === importMap.imports.preact; } catch { return false; } })();
+      if (!honoured && esm !== "breaks") {
+        outcome(false, `✗ This browser <b>ignored the import map</b>: it doesn't allow one once a module has loaded (Firefox warns "Import maps are not allowed after a module load or preload has started"), and mport is itself a module. Put the map in the HTML before any module script (a server or build step can do that with <code>renderImportMap()</code>), or <a href="${link("runtime", esm)}">use router.import()</a>, which has no such limit.`);
+        $("#app").replaceChildren(h("p", { className: "status" }, "not started: no import map"));
+      } else try {
         const app = await import("./app-main.mjs");
         app.mount($("#app"), { sources: resolved.map((r) => ({ label: label(r.specifier), version: r.version, provider: r.provider })) });
         outcome(true, esm === "down"

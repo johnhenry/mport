@@ -37,10 +37,35 @@ export function injectModulePreload(importMap, { document = globalThis.document,
   });
 }
 
-/** Resolve `specifiers` (build options such as `scopes` and `conflicts` pass through), inject the import map, and return the build result. */
-export async function startup(router, specifiers, { document, ...buildOptions } = {}) {
+// Did the engine take the import map? Firefox (as of 155) ignores one added after any module
+// has loaded, which is always the case when mport itself is a module: bare imports then fail with a
+// confusing error. import.meta.resolve() applies the current import map, so asking it for a key
+// the map defines tells us. Only checked against the real document (a stand-in has no engine behind it).
+function honoured(map, doc) {
+  try {
+    const key = Object.keys(map.imports ?? {}).find((k) => !k.endsWith("/"));
+    if (!key || typeof import.meta.resolve !== "function") return true;
+    return import.meta.resolve(key) === new URL(map.imports[key], doc.baseURI).href;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve `specifiers` (build options such as `scopes` and `conflicts` pass through), inject the
+ * import map, and return the build result. Rejects, with the result as `error.result`, if the
+ * browser ignored the map (see `honoured`).
+ */
+export async function startup(router, specifiers, { document: doc = globalThis.document, ...buildOptions } = {}) {
   const result = await router.build(specifiers, buildOptions);
-  injectImportMap(result.importMap, { document });
+  injectImportMap(result.importMap, { document: doc });
+  if (doc && doc === globalThis.document && !honoured(result.importMap, doc)) {
+    throw Object.assign(new Error(
+      "mport: this browser ignored the import map startup() injected. Firefox does not allow an import map once any module " +
+      "has loaded (it warns \"Import maps are not allowed after a module load or preload has started\"), and mport is itself a module. " +
+      "Put the map in the HTML before any module script (renderImportMap()), or load packages with createImporter().",
+    ), { result });
+  }
   return result;
 }
 

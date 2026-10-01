@@ -104,38 +104,64 @@ export function cdnResponse(host, pathname) {
 }
 
 /**
- * Answer every CDN and registry request from the stubs.
+ * What the stub network answers for a URL: `{ status, type, body }`. `state` (all optional, and
+ * changeable while a test runs): `down` (hosts that answer 503), `broken` (hosts whose JS
+ * modules answer a syntax error), `tamper(url)` (replacement bytes for one URL).
+ */
+export function respond(urlString, state = {}) {
+  const url = new URL(urlString);
+  const text = (status, body) => ({ status, type: "text/plain", body });
+  if (state.down?.has(url.hostname)) return text(503, "down");
+  if (url.hostname === "registry.npmjs.org") {
+    const hit = REGISTRY[decodeURIComponent(url.pathname.slice(1)).replace(/^(@[^/]+)\//, "$1%2F")];
+    return hit ? json(hit) : text(404, "not found");
+  }
+  if (url.hostname === "jsr.io") return JSR[url.pathname] ? json(JSR[url.pathname]) : text(404, "not found");
+  const tampered = state.tamper?.(url);
+  if (tampered !== undefined) return { status: 200, ...js(tampered) };
+  const hit = cdnResponse(url.hostname, url.pathname);
+  if (!hit) return text(404, "not found");
+  if (state.broken?.has(url.hostname) && hit.type.startsWith("text/javascript")) return { status: 200, type: hit.type, body: "export default (;" };
+  return { status: hit.status ?? 200, type: hit.type, body: hit.body };
+}
+
+/** The same stub network as a `fetch`, for building import maps in Node (outside any browser). */
+export const stubFetch = (state = {}) => async (input, init = {}) => {
+  const { status, type, body } = respond(String(input), state);
+  return new Response(init.method === "HEAD" ? null : body, { status, headers: { "content-type": type } });
+};
+
+/**
+ * Answer every CDN and registry request from the stubs (see `respond`); abort any other off-origin request.
  * @param {import("@playwright/test").BrowserContext|import("@playwright/test").Page} target
- * @param {{ down?: Set<string>, broken?: Set<string>, tamper?: (url: URL) => string | undefined }} [state]
- *   `down`: hosts that answer 503; `broken`: hosts whose JS modules answer a syntax error;
- *   `tamper(url)`: replacement bytes for one URL. All three may be changed while the page runs.
  * @returns {{ requests: Array<{ method: string, url: string }>, state: object }}
  */
 export async function installStubs(target, state = {}) {
   state.down ??= new Set();
   state.broken ??= new Set();
   const requests = [];
-  await target.route((url) => ![...CDN_HOSTS, ...API_HOSTS].includes(url.hostname) && url.hostname !== "127.0.0.1" && url.hostname !== "localhost", (route) => route.abort());
-  await target.route((url) => [...CDN_HOSTS, ...API_HOSTS].includes(url.hostname), async (route) => {
+  const known = [...CDN_HOSTS, ...API_HOSTS];
+  await target.route((url) => !known.includes(url.hostname) && url.hostname !== "127.0.0.1" && url.hostname !== "localhost", (route) => route.abort());
+  await target.route((url) => known.includes(url.hostname), async (route) => {
     const request = route.request();
-    const url = new URL(request.url());
     requests.push({ method: request.method(), url: request.url() });
-    const send = (status, type, body) => route.fulfill({ status, headers: { ...CORS, "content-type": type }, body: request.method() === "HEAD" ? "" : body });
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: CORS });
-    if (state.down.has(url.hostname)) return send(503, "text/plain", "down");
-    if (url.hostname === "registry.npmjs.org") {
-      const hit = REGISTRY[decodeURIComponent(url.pathname.slice(1)).replace(/^(@[^/]+)\//, "$1%2F")];
-      return hit ? send(200, "application/json", JSON.stringify(hit)) : send(404, "text/plain", "not found");
-    }
-    if (url.hostname === "jsr.io") {
-      return JSR[url.pathname] ? send(200, "application/json", JSON.stringify(JSR[url.pathname])) : send(404, "text/plain", "not found");
-    }
-    const tampered = state.tamper?.(url);
-    if (tampered !== undefined) return send(200, "text/javascript; charset=utf-8", tampered);
-    const hit = cdnResponse(url.hostname, url.pathname);
-    if (!hit) return send(404, "text/plain", "not found");
-    if (state.broken.has(url.hostname) && hit.type.startsWith("text/javascript")) return send(200, hit.type, "export default (;");
-    return send(hit.status ?? 200, hit.type, hit.body);
+    const { status, type, body } = respond(request.url(), state);
+    return route.fulfill({ status, headers: { ...CORS, "content-type": type }, body: request.method() === "HEAD" ? "" : body });
   });
   return { requests, state };
+}
+
+/**
+ * Serve generated pages at /__gen/<name>.html: `pages[name]` is the HTML, which may be set
+ * (or replaced) while a test runs. For pages whose import map must be in the HTML before
+ * any module runs, as in a server-rendered page.
+ */
+export async function installPages(target, pages = {}) {
+  await target.route((url) => url.pathname.startsWith("/__gen/"), (route) => {
+    const name = new URL(route.request().url()).pathname.replace("/__gen/", "").replace(/\.html$/, "");
+    const html = pages[name];
+    return html === undefined ? route.fulfill({ status: 404, body: "no such page" }) : route.fulfill({ status: 200, headers: { "content-type": "text/html; charset=utf-8" }, body: html });
+  });
+  return pages;
 }

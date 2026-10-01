@@ -1139,8 +1139,22 @@ Appends a `<link rel="modulepreload">` to `<head>` for each `modulePreloads(map)
 startup(router, specifiers: string[], { document?, ...buildOptions }?): Promise<BuildResult>
 ```
 
-`router.build(specifiers, buildOptions)` (`scopes`, `conflicts`, `signal`, …), then `injectImportMap(importMap)`. Afterwards plain
-`import "react"` works natively, and nothing retries if a mirror goes down later.
+`router.build(specifiers, buildOptions)` (`scopes`, `conflicts`, `graph`, `signal`, …), then
+`injectImportMap(importMap)`. Afterwards plain `import "react"` works natively, and nothing
+retries if a mirror goes down later.
+
+**Firefox ignores a late import map.** Firefox (155, the version the browser tests run) does not
+allow an import map once any module has loaded or begun preloading: it logs "Import maps are
+not allowed after a module load or preload has started" and leaves bare specifiers unmapped.
+Since mport is itself a module, `startup()` and `injectImportMap()` cannot work there (Chromium
+153 and WebKit 26 accept the map). So that this isn't a mystery `TypeError` later, when `startup()`
+runs against the real `document` it asks the engine (`import.meta.resolve()` of the map's first
+non-prefix key) whether the map took, and if not **rejects with an `Error` whose `result` property
+is the build result** (message: *this browser ignored the import map startup() injected*). The
+map has still been inserted. With a `document` option (a stand-in) nothing is checked.
+What works in every engine: put the map in the HTML before any module script (build it ahead of
+time or on a server, and use [`renderImportMap()`](#renderimportmap)), or load packages with
+[`createImporter()`](#createimporter), which needs no import map.
 
 ### createImporter()
 

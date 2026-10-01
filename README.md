@@ -365,6 +365,27 @@ const { default: dayjs } = await load("dayjs@1");
 
 With `startup()`, the import map has to be in the page before the first module that uses it resolves. Put the startup code in its own `<script type="module">` before the rest of your modules, or generate the map at build time with the CLI.
 
+**Firefox cannot take an import map after a module has loaded** (it warns "Import maps are not allowed after a module load or preload has started"), and mport is a module, so `startup()` and `injectImportMap()` work in Chromium and Safari/WebKit but not in Firefox. There `startup()` rejects with a clear error (carrying the build result as `error.result`) instead of leaving bare imports to fail. Firefox needs the map in the HTML before any module script, which a build step or server does with `renderImportMap()`, or `createImporter()` (route B), which needs no map. The CI runs the browser runtime on all three engines and pins this behaviour down: see [Browser tests](#browser-tests-and-benchmarks).
+
+## Browser tests and benchmarks
+
+`npm run test:browser` runs [Playwright](https://playwright.dev) tests on **Chromium, Firefox and WebKit** (`npx playwright install --with-deps` once; CI does this on all three, one job each). Pages are served from the repo by a small static server Playwright starts (`webServer`, port 8731, `MPORT_TEST_PORT` to change it), and every CDN and registry request is answered by `page.route` stubs, so the suite makes no network requests. It covers `examples/playground.html` (all ten scenarios must pass their own checks), `app.html` in both modes with esm.sh up, down and broken, `compat.html` (the 1.x API on both entry points), and `injectImportMap`, `startup`, `createImporter`, `injectModulePreload`, plus real engines' handling of generated import maps: scopes from `conflicts: "scope"`, whole-graph `integrity`, and a changed file refused where the engine enforces import-map integrity.
+
+`npm run bench` (non-gating, also a `continue-on-error` CI job) measures mport's own work against a fake `fetch`, so it shows overhead, not network speed. On an Apple M-series laptop (Node 24):
+
+| | |
+|---|---|
+| cold build, 50 specifiers, esm.sh route, HEAD probe | 0.8 ms |
+| cold build, 50 specifiers, jsDelivr raw (entry lookup + probe) | 2.8 ms |
+| cold build, 50 specifiers, `probe: "none"` | 0.5 ms |
+| cold build with `graph: true` (4 files per module, 200 files hashed and parsed) | 5.2 ms |
+| the same cold build with 20 ms per request | 42.5 ms (concurrent: about two round trips, not 100) |
+| `resolve()`, pinned by a lockfile, `probe: "none"` | ~283,000 / s |
+| `resolve()`, warm registry memo, `probe: "none"` | ~165,000 / s |
+| `parseImports()` | ~42 MB/s |
+
+A real build is dominated by round trips; these numbers say mport adds well under a millisecond per specifier. Your machine will differ: run it.
+
 ## Debugging: traces and events
 
 Every resolution carries a trace of what was tried:
