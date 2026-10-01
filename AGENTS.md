@@ -22,7 +22,7 @@ examples and the CLI. `docs/api.md` is the behavioural contract: change it with 
    `git clone . /tmp/mport-verifyN && cd $_ && npm ci && npm test && npm run examples`.
 7. Commit, push, close the issue with a comment naming the commit SHA.
 
-CI (`.github/workflows/ci.yml`) runs steps 1-4 in this order on Node 26; match it locally.
+CI (`.github/workflows/ci.yml`, the reusable family gate) runs steps 1-5 on Node 26, with `typecheck`, `test`, `examples`, `pack` in this order; match it locally.
 Node 24 also runs everything today, but 26 is the floor that is tested.
 
 ## Browser tests and the type-check
@@ -82,7 +82,37 @@ A change is done when all of the following hold, not just when tests pass:
 
 ## Releases
 
-Bump `version` in `package.json` in a PR, add the `CHANGELOG.md` entry, merge, then
-`gh release create v<version>` — the release event triggers
-`.github/workflows/publish.yml`, which runs the full gate and is idempotent (skips if the
-version is already on npm). It needs a scope-capable `NPM_TOKEN` repo secret.
+CI (`.github/workflows/ci.yml`) and publish (`publish.yml`) call the family's reusable workflows
+(`johnhenry/workflows/.github/workflows/{ci,npm-publish}.yml@v1`). Local to this repo and
+not expressible there: the `browser` matrix (chromium/firefox/webkit) and the non-gating `bench`
+in ci.yml. `publish.yml` folds the browser suite into its `gate-commands` (installs all three
+engines, runs `npm run test:browser`), keeps `id-token: write` on the caller job and
+`secrets: inherit`, and triggers on `release: published`, `workflow_dispatch` and a redundant
+`push: tags: v*` (the release event can be dropped for `uses:`-bodied jobs; the `npm view`
+guard makes a double run a no-op). The caller's concurrency group in ci.yml is named differently
+from the reusable one on purpose so it never cancels the called workflow.
+
+Routine release: bump `version` in `package.json` in a PR, add the `CHANGELOG.md` entry, merge,
+then `gh release create v<version>`.
+
+### First release checklist (0.0.0, never published)
+
+Checked without a token on 2026-10-01: `npm pack --dry-run` / `npm publish --dry-run` list 34
+files (`src/`, `bin/`, `docs/`, `CHANGELOG.md`, `README.md`, `LICENSE.md`, `package.json`; no
+tests, no scratch, no `.env`), 106.6 kB. `name` is `@johnhenry/mport`, `repository.url` is
+`git+https://github.com/johnhenry/mport.git` (must match the publishing repo for provenance),
+`publishConfig.access` is `public`, `engines.node` `>=26`, every `exports` entry has a `types`
+file. `npm view @johnhenry/mport@0.0.0` exits 1 with E404 for an unpublished scoped package, and the
+guard treats any non-zero exit as "not published, go ahead", so a 404 does not fail the job.
+
+Before: the repo secret `NPM_TOKEN` must exist (a scope-capable token for `@johnhenry`; the reusable
+workflow requires it) and `main` CI must be green on the head commit.
+
+```sh
+gh release create v0.0.0 --target main --title v0.0.0 --notes "First release of @johnhenry/mport (successor to the unpublished mport 2.x)."
+```
+
+Verify afterwards: the Publish run is green (a tag push may start a second run that skips with the
+"Already published" notice); `npm view @johnhenry/mport version` prints `0.0.0`; the package page
+shows the provenance badge; `npx -p @johnhenry/mport mport --help` runs from an empty directory.
+A failed run can be retried with "Re-run failed jobs" or `workflow_dispatch`.

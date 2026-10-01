@@ -5,40 +5,33 @@ on:
     branches: [main]
   pull_request:
 
-# Supersede an in-flight run when new commits land on the same ref -- the
-# whole family shares this block so a rapid push sequence never queues N
-# redundant runs.
+# Supersede an in-flight run when new commits land on the same ref. The reusable
+# `test` job carries the family's own group (ci-<workflow>-<ref>); this one is
+# deliberately named differently so the caller group never cancels the called one.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: mport-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # The family gate: install, typecheck, test, examples, pack. Node 26 is the
+  # engines floor (matches .nvmrc and publish.yml).
   test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # engines.node >=26.0.0 -- test the floor version directly rather
-        # than a matrix of now-unsupported older majors.
-        node-version: [26]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          # `cache: npm` is fine on ubuntu-latest; never on a self-hosted runner.
-          cache: npm
-      - run: npm ci
-      # src/types.d.ts and src/core.d.ts compiled against test/types.check.ts
-      - run: npm run typecheck
-      - run: npm test
-      - name: Examples smoke test
-        run: npm run examples
+    uses: johnhenry/workflows/.github/workflows/ci.yml@v1
+    with:
+      node-versions: '["26"]'
+      os: '["ubuntu-latest"]'
+      gate-commands: |
+        npm run typecheck
+        npm test
+        npm run examples
+        npm pack --dry-run
 
-  # The browser runtime (examples pages, startup(), createImporter(), injectImportMap,
-  # injectModulePreload, import-map scopes and integrity) on each engine. Pages are served
-  # from the repo by a static server Playwright starts; every CDN request is stubbed, so
-  # nothing here touches the network apart from installing the browsers.
+  # mport-specific, not expressible in the reusable workflow (it has no browser
+  # matrix): the browser runtime (examples pages, startup(), createImporter(),
+  # injectImportMap, injectModulePreload, import-map scopes and integrity) on each
+  # engine. Pages are served from the repo by a static server Playwright starts;
+  # every CDN request is stubbed, so nothing touches the network apart from
+  # installing the browsers.
   browser:
     runs-on: ubuntu-latest
     strategy:
