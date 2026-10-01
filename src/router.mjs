@@ -105,7 +105,9 @@ export function createRouter(routes, options = {}) {
   const match = (req) => {
     const full = matchText(req);
     const bare = req.explicit ? matchText({ ...req, explicit: false }) : null;
-    return table.find((r) => r.test(full) || (bare !== null && r.test(bare)));
+    // a directory specifier ("components/") is also matched as written, so "components/*" routes it
+    const dir = req.prefix ? `${full}/` : null;
+    return table.find((r) => r.test(full) || (bare !== null && r.test(bare)) || (dir !== null && r.test(dir)));
   };
 
   async function resolve(specifier, opts = {}) {

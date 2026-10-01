@@ -163,6 +163,17 @@ createRouter([
 ]);
 ```
 
+**An app-owned prefix** (your own `/components/` directory) is routed like any package, with no registry lookup: a `custom()` template that has neither `{version}` nor `{entry}` asks the registry nothing.
+
+```js
+createRouter({
+  "components/*": custom("/components/{path}", { name: "app", build: "app" }),   // components/button.js → /components/button.js
+  "*": [esmSh(), jsDelivr()],
+});
+```
+
+`components/` as a specifier gives the prefix mapping `"components/": "/components/"`. Set `name` and `build` explicitly (a path-only template has no host to default them from); `build: "app"` keeps the lockfile from handing the path to a CDN. [docs/api.md](docs/api.md#recipe-an-app-owned-prefix-no-registry); [example 20](examples/20-app-owned-prefix-needs-no-registry.mjs).
+
 What each route value means:
 - An array is shorthand for `fallback(...)`.
 - A string is shorthand for `custom(url)`.
@@ -538,7 +549,7 @@ The default race still mixes builds (raw jsDelivr/unpkg files against jspm's tra
 
 ## Examples
 
-[`examples/README.md`](examples/README.md) indexes them all. Nineteen numbered Node examples prove one behaviour each, offline, against a fake network (`npm run examples`, or `npm run example:05` for one): range resolution, fallback, race, CommonJS skipping, lockfile pinning, the circuit breaker, `verified()`, `router.import()` failover, `build()`, the CLI, the 1.x race, server-rendered import maps, conflicting versions scoped per dependent, whole-graph integrity, `outdated`/`update`, the Rollup plugin, `local()` serving a package that is not on npm, the CSP hash of an import map, and a raw-CDN package's dependencies joining the map.
+[`examples/README.md`](examples/README.md) indexes them all. Twenty numbered Node examples prove one behaviour each, offline, against a fake network (`npm run examples`, or `npm run example:05` for one): range resolution, fallback, race, CommonJS skipping, lockfile pinning, the circuit breaker, `verified()`, `router.import()` failover, `build()`, the CLI, the 1.x race, server-rendered import maps, conflicting versions scoped per dependent, whole-graph integrity, `outdated`/`update`, the Rollup plugin, `local()` serving a package that is not on npm, the CSP hash of an import map, a raw-CDN package's dependencies joining the map, and an app-owned prefix with no registry lookup.
 
 Three browser pages share one header, one timeline and one way of explaining results:
 

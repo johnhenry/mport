@@ -201,6 +201,44 @@ The string and array shorthands work only at the top level of a route value (and
 its arrays). Inside `fallback()`, `race()` and the other strategies, a string throws
 `TypeError: wrap URL strings with custom() inside strategies`.
 
+**A directory specifier is matched as written too.** `components/` (a prefix mapping) has the match
+text `components`, and is also tested as `components/`, so a `"components/*"` route captures it;
+an exact `"components"` route still does. (Before, `components/` skipped a `"components/*"` route
+and was looked up on the registry.)
+
+#### Recipe: an app-owned prefix, no registry
+
+Your own modules can be routed like packages, so one import map covers your code and your
+dependencies, and a lockfile or `verified()` strategy can treat them uniformly:
+
+```js
+const router = createRouter({
+  "components/*": custom("/components/{path}", { name: "app", build: "app" }),
+  "*": [esmSh(), jsDelivr()],
+});
+await router.build(["components/button.js", "components/", "react@^19"]);
+// "components/button.js" → "/components/button.js", "components/" → "/components/", react → esm.sh
+```
+
+Why it needs no registry: a [`custom()`](#custom) template needs a version lookup only if it contains
+`{version}`, and an entry lookup only if it contains `{entry}`; `{path}` alone is just the part of the
+specifier after the package name (`components/forms/input.js` → `forms/input.js`), so the router never asks npm about a
+package called `components`. Choices that matter:
+
+- **Give it an explicit `name` and `build`.** Without them both default to the template's host, and a
+  path-only template has none (the template string itself becomes the name). `name` is the identity in traces,
+  health and `exclude`; `build: "app"` is what the lockfile pins, so a lock-pinned `components/…` can only be
+  served by another provider of build `"app"` (say a `custom("https://static.example.com/components/{path}", { build: "app" })` mirror), never by a CDN
+  that happens to have a package of that name.
+- **A directory specifier (`components/`) gives a prefix mapping** (`"components/": "/components/"`), so any
+  `import "components/x.js"` resolves without listing each file. Listing files gives you `modulepreload` and
+  `integrity` candidates; the prefix does not.
+- **Route on the first path segment.** The route pattern is matched against the specifier without a version, so
+  `"components/*"` (or `/^components(\/|$)/` in the array form) captures it. A package of the same name on
+  npm is shadowed by the route, which is the point.
+- The lockfile records `{ provider: "app", build: "app", url }` and **no `version`**; there is nothing to pin.
+  Files are not hashed (`graph` skips origin-relative URLs).
+
 #### route()
 
 ```ts
