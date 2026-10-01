@@ -266,6 +266,8 @@ export function createRouter(routes, options = {}) {
     name,
     health,
     lock,
+    /** the registry client resolving versions (createRegistry() unless `registry` was given) */
+    registry,
     resolve,
     import: importModule,
     /**

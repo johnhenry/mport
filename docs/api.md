@@ -28,7 +28,7 @@ tutorial; this is the reference.
 - [Errors](#errors)
 - [Lockfiles](#lockfiles)
 - [Import maps](#import-maps)
-- [Registry helpers and CommonJS detection](#registry-helpers-and-commonjs-detection)
+- [Registry helpers and CommonJS detection](#registry-helpers-and-commonjs-detection) (incl. `outdated()`)
 - [Browser runtime helpers](#browser-runtime-helpers)
 - [semver](#semver)
 - [The CLI](#the-cli)
@@ -1008,11 +1008,38 @@ createRegistry({ fetch? = globalThis.fetch, npm? = "https://registry.npmjs.org",
 | Method | Returns |
 |---|---|
 | `version({ registry, name, range })` | the exact version per the [resolution table](#resolution-versions-and-entry-files) |
+| `info(registry, name)` | `{ versions, tags, deprecated }` for a package on `"npm"` or `"jsr"`; one request per package, however many ranges ask (JSR: yanked versions are left out, `tags` is `{ latest }`) |
+| `manifest(name, version)` | the package.json for one exact npm version (what `conflicts: "scope"` reads) |
 | `entryInfo(name, version, subpath?)` | `{ file, esm, hasExports }` from `GET <npm>/<name>/<version>` |
 | `entry(name, version, subpath?)` | `entryInfo(...).file` |
 
 All memoized per client; failures are evicted. Errors are `ResolutionError`s as listed
 under [Errors](#errors).
+
+### pickVersion()
+
+```ts
+pickVersion(name: string, range: string | undefined, info: { versions, tags, deprecated? }): string
+```
+
+The choice `registry.version()` makes from `registry.info()`: a dist-tag name is that tag;
+no range means `latest`; otherwise `latest` if it satisfies the range, else the highest
+satisfying version, passing over deprecated ones unless nothing else matches. Throws
+`ResolutionError` for an unparseable range or when nothing satisfies it.
+
+### outdated()
+
+```ts
+outdated(lock: Lockfile, { registry, names?, signal? }): Promise<{ outdated: OutdatedRow[], skipped: { key, reason }[] }>
+```
+
+What `mport outdated` prints. For each lockfile entry (all, or those whose key, specifier or
+package name is in `names`) on npm or JSR with an exact locked `version`: `wanted` is the
+newest version the entry's own `range` allows (an exact range is its own `wanted`) and
+`latest` the registry's `latest` dist-tag. A row is returned when `updatable` (`wanted` is
+newer than `current`) or `behindLatest` (`latest` is). GitHub refs, entries with no exact
+version, and entries whose lookup failed are returned in `skipped` with a reason instead
+of failing the call. `registry` is any client with `info()`; `router.registry` works.
 
 ### entryInfo()
 
@@ -1147,6 +1174,8 @@ match `20.0.0-rc.1`; `>=20.0.0-rc.0` does). An unparseable range throws `TypeErr
 mport build   [specifier...] [--config file] [--out importmap.json] [--lock mport.lock.json] [--relock] [--conflicts error|scope]
               [--graph [--max-files N] [--max-depth N]]
 mport resolve <specifier> [--config file] [--trace] [--lock mport.lock.json] [--relock]
+mport outdated [name...] [--config file] [--lock mport.lock.json] [--json]
+mport update   [name...] [--config file] [--lock mport.lock.json] [--json]
 mport --help
 ```
 
@@ -1162,6 +1191,7 @@ global `fetch` (Node 18+; the package declares Node >= 26).
 | `--conflicts` | | config's `conflicts`, else `error` | `build`: `scope` generates import-map scopes for conflicting versions (see [Conflicting versions](#conflicting-versions-conflicts-scope)) |
 | `--graph` | | `false` (or config's `graph`) | `build`: hash the whole import graph (see [Whole-graph integrity](#whole-graph-integrity-graph)); the lockfile gets `files`, the import map `integrity` for every file; prints a warning per truncated walk |
 | `--max-files`, `--max-depth` | | 500, 20 | the graph bounds; imply `--graph` |
+| `--json` | | `false` | `outdated` and `update` print JSON |
 | `--trace` | | `false` | `resolve` prints the trace too |
 | `--help` | `-h` | | print usage |
 
@@ -1196,6 +1226,42 @@ two-space JSON with a trailing newline), and prints
 `mport: wrote importmap.json (N imports) and mport.lock.json`. It fails if there are no
 specifiers. **`resolve`** prints the Resolution as JSON without `module` and, unless
 `--trace`, without `trace`; an unroutable specifier prints `{}`.
+
+### `mport outdated` and `mport update`
+
+```
+mport outdated [name...] [--config file] [--lock mport.lock.json] [--json]
+mport update   [name...] [--config file] [--lock mport.lock.json] [--json]
+```
+
+Both need the lockfile (an error if it doesn't exist) and use the config's router, so its
+registries and `fetch` apply. `name` selects entries by lock key (`react@^19`), specifier
+or package name (`react`, which matches every entry for that package); none selects all.
+
+**`outdated`** prints a table (`package current wanted latest`) of the entries where the
+locked version is behind what the range allows or behind `latest`, then a
+`mport: skipped <key>: <reason>` line for each it could not judge (see
+[`outdated()`](#outdated)), or `mport: everything in the lockfile is up to date`. `--json`
+prints `{ "outdated": OutdatedRow[], "skipped": [...] }`. It always exits 0: read the JSON
+to gate on it. It only reads, so a prebuilt-router config works.
+
+**`update`** re-resolves the selected entries (their pins are dropped, so they go back to
+the registry; the router's strategy, build and mirrors choose the URL as in `build`) and
+re-resolves every other entry against its pin, then rewrites the lockfile if it changed
+and prints `mport: <specifier>: <from> -> <to>` per moved entry. Notes:
+
+- It moves a package **within its range** (`^19` to the newest 19.x), never past it; to cross
+  a major, change the specifier and `build`.
+- It does **not** touch the import map: run `mport build` afterwards.
+- It re-resolves every locked specifier (to rebuild a complete lockfile), so all CDN
+  probes of a build run; entries that conflict on one import-map key are handled as with
+  `--conflicts scope`.
+- A lockfile with `files` (graph hashes) gets its graph re-walked and **all** its file
+  hashes re-recorded, not only the selected packages': the files of one entry cannot be told
+  from another's.
+- `--relock` is an error (it is what `update` without names does); a prebuilt-router
+  config is an error, as for `build`.
+- `--json` prints `{ "updated": [{ key, specifier, name, from, to }], "checked": N, "lockfile", "written": bool }`.
 
 Exit codes: 0 on success; on any error the message goes to stderr and the exit code is 1
 (unknown command, missing specifier, a rejected resolution).

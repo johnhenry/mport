@@ -6,7 +6,7 @@ export {
   provider, esmSh, jsDelivr, unpkg, jspm, jsr, github, local, custom, origin, DEFAULT_ORIGINS,
   fallback, race, adaptive, weighted, prefer, verified, cache, sri,
   HealthRegistry, RoutingError, SkipError, IntegrityError,
-  createRegistry, entryOf, entryInfo, resolveExports, ResolutionError,
+  createRegistry, pickVersion, outdated, entryOf, entryInfo, resolveExports, ResolutionError,
   compileImportMap, mergeImportMaps, renderImportMap, modulePreloads, renderModulePreload,
   createLock, lockKey, parseImports,
   injectImportMap, injectModulePreload, startup, createImporter,
@@ -18,5 +18,5 @@ export type {
   MPortOptions, SpecifierObject, MPortOrigin, Registry, ParsedSpecifier, Artifact, TraceEvent, Resolution,
   Node, Provider, ProviderDefinition, Match, Route, Routes, LockEntry, Lockfile, Lock, ImportMap, Probe,
   CircuitBreakerOptions, RegistryClient, RouterOptions, ResolveOptions, BuildOptions, BuildResult, Router,
-  CacheStore, HealthState, ConflictReport, GraphOptions, GraphReport,
+  CacheStore, HealthState, ConflictReport, GraphOptions, GraphReport, RegistryInfo, OutdatedRow,
 } from "./types.js";

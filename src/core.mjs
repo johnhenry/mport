@@ -9,7 +9,8 @@ export {
   fallback, race, adaptive, weighted, prefer, verified, cache, sri,
   HealthRegistry, RoutingError, SkipError, IntegrityError,
 } from "./strategies.mjs";
-export { createRegistry, entryOf, entryInfo, resolveExports, ResolutionError } from "./registry.mjs";
+export { createRegistry, entryOf, entryInfo, resolveExports, pickVersion, ResolutionError } from "./registry.mjs";
+export { outdated } from "./outdated.mjs";
 export { compileImportMap, mergeImportMaps, renderImportMap, modulePreloads, renderModulePreload } from "./importmap.mjs";
 
 export { createLock, lockKey } from "./lock.mjs";

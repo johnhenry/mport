@@ -8,7 +8,7 @@ import mport, {
   HealthRegistry, RoutingError, SkipError, IntegrityError, ResolutionError,
   parseSpecifier, keyOf, isRoutable, createRegistry, entryInfo, entryOf, resolveExports,
   compileImportMap, mergeImportMaps, createLock, lockKey, injectImportMap, startup, createImporter, semver,
-  type Resolution, type TraceEvent, type Lockfile, type ImportMap, type HealthState, type Router, type ConflictReport, type GraphReport, parseImports,
+  type Resolution, type TraceEvent, type Lockfile, type ImportMap, type HealthState, type Router, type ConflictReport, type GraphReport, parseImports, outdated, pickVersion, type OutdatedRow,
 } from "@johnhenry/mport";
 import * as core from "@johnhenry/mport/core";
 import firefoxDefault from "@johnhenry/mport/firefox";
@@ -45,6 +45,7 @@ export async function check(): Promise<void> {
   const mod = await router.import<{ default: unknown }>("dayjs@1", { build: "esm.sh", signal: AbortSignal.timeout(1000) });
   void mod.default;
 
+  const importLock: Lockfile = { lockfileVersion: 1, packages: {} };
   const { importMap, lock }: { importMap: ImportMap; lock: Lockfile } = await router.build(["react@^19", "lit/"], {
     scopes: { "https://legacy.example.com/": { react: "react@18" } },
   });
@@ -58,6 +59,10 @@ export async function check(): Promise<void> {
   void [gr?.files, gr?.truncated[0]?.reason, gr?.bare, walked.lock.files?.["https://x.test/a.js"]];
   void parseImports("import 'a'", { dynamic: true });
   void compileImportMap([{ key: "a", url: "u" }], {}, { integrity: { u: "sha384-x" } });
+  const behind = await outdated(importLock, { registry: router.registry, names: ["react"] });
+  const row: OutdatedRow | undefined = behind.outdated[0];
+  void [row?.current, row?.wanted, row?.latest, row?.updatable, behind.skipped[0]?.reason];
+  void pickVersion("react", "^19", { versions: ["19.0.0"], tags: { latest: "19.0.0" } });
   const pinned = createRouter({ "*": esmSh() }, { lock });
   void pinned.lock.get("react@^19")?.version;
   void mergeImportMaps(importMap, compileImportMap([{ key: "a", url: "https://a.test/a.js" }]));

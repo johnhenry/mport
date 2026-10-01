@@ -83,6 +83,7 @@
     "example:12": "node examples/12-server-renders-an-import-map-with-preloads.mjs",
     "example:13": "node examples/13-conflicting-versions-get-scopes.mjs",
     "example:14": "node examples/14-whole-graph-integrity-in-the-lockfile.mjs",
+    "example:15": "node examples/15-outdated-and-update-keep-the-lockfile-current.mjs",
     "demo": "deno -A examples/demo.mjs",
     "demo:firefox": "deno -A examples/demo.firefox.mjs",
     "demo:html": "python3 -m http.server 8712"

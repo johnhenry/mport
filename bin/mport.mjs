@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // mport build   [specifier...] [--config mport.config.mjs] [--out importmap.json] [--lock mport.lock.json] [--relock]
 //               [--conflicts error|scope] [--graph [--max-files N] [--max-depth N]]
+// mport outdated [name...] [--config file] [--lock mport.lock.json] [--json]
+// mport update   [name...] [--config file] [--lock mport.lock.json] [--json]
 // mport resolve <specifier> [--config mport.config.mjs] [--trace]
 //
 // The config module's default export is one of
@@ -15,11 +17,14 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { createRouter } from "../src/router.mjs";
 import { esmSh, jsDelivr, unpkg } from "../src/providers.mjs";
+import { outdated, selectEntries } from "../src/outdated.mjs";
 
 const USAGE = `usage:
   mport build [specifier...] [--config file] [--out importmap.json] [--lock mport.lock.json] [--relock] [--conflicts error|scope]
               [--graph [--max-files N] [--max-depth N]]
-  mport resolve <specifier> [--config file] [--trace]`;
+  mport resolve <specifier> [--config file] [--trace]
+  mport outdated [name...] [--config file] [--lock mport.lock.json] [--json]
+  mport update   [name...] [--config file] [--lock mport.lock.json] [--json]`;
 
 const exists = (p) => access(p).then(() => true, () => false);
 
@@ -33,6 +38,7 @@ export async function main(argv = process.argv.slice(2), { log = console.log, cw
       lock: { type: "string", short: "l" },
       relock: { type: "boolean", default: false },
       trace: { type: "boolean", default: false },
+      json: { type: "boolean", default: false },
       conflicts: { type: "string" },
       graph: { type: "boolean", default: false },
       "max-files": { type: "string" },
@@ -47,7 +53,17 @@ export async function main(argv = process.argv.slice(2), { log = console.log, cw
   let config = configPath ? (await import(pathToFileURL(resolvePath(cwd, configPath)).href)).default : {};
   const lockName = values.lock ?? "mport.lock.json";
   const lockPath = resolvePath(cwd, lockName);
-  const lock = !values.relock && (await exists(lockPath)) ? JSON.parse(await readFile(lockPath, "utf8")) : undefined;
+  const lockFile = (await exists(lockPath)) ? JSON.parse(await readFile(lockPath, "utf8")) : undefined;
+  if ((command === "outdated" || command === "update") && !lockFile) throw new Error(`mport ${command}: no lockfile at ${lockName} (run \`mport build\` first)`);
+  if (command === "update" && values.relock) throw new Error("mport update: --relock is what update does; it takes names instead (mport update [name...])");
+  // update re-resolves what it selects, so those entries must not pin themselves; graph hashes are re-recorded
+  const toUpdate = command === "update" ? selectEntries(lockFile, specs) : [];
+  if (command === "update" && specs.length && !toUpdate.length) {
+    throw new Error(`mport update: no locked entry matches ${specs.map((n) => `"${n}"`).join(", ")} (names are lock keys, specifiers or package names)`);
+  }
+  const lock = command === "update"
+    ? { ...lockFile, files: undefined, packages: Object.fromEntries(Object.entries(lockFile.packages ?? {}).filter(([k]) => !toUpdate.some(([u]) => u === k))) }
+    : !values.relock ? lockFile : undefined;
   const fromFunction = typeof config === "function";
   if (fromFunction) config = await config({ lock, relock: values.relock, lockPath });
   // A router built ahead of time can't take --lock/--relock: reading or rewriting the lock
@@ -63,6 +79,43 @@ export async function main(argv = process.argv.slice(2), { log = console.log, cw
     ? config
     : createRouter(config.routes ?? { "*": [esmSh(), jsDelivr(), unpkg()] }, { ...config.options, lock });
 
+  if (command === "outdated") {
+    if (typeof router.registry?.info !== "function") throw new Error("mport outdated: the router has no registry client to ask (does the config export a createRouter() router?)");
+    const { outdated: rows, skipped } = await outdated(lockFile, { registry: router.registry, names: specs });
+    if (values.json) log(JSON.stringify({ outdated: rows, skipped }, null, 2));
+    else {
+      if (!rows.length) log("mport: everything in the lockfile is up to date");
+      else {
+        const table = [["package", "current", "wanted", "latest"], ...rows.map((r) => [r.specifier, r.current, r.wanted, r.latest])];
+        const w = [0, 1, 2, 3].map((c) => Math.max(...table.map((row) => String(row[c]).length)));
+        for (const row of table) log(row.map((cell, c) => String(cell).padEnd(w[c])).join("  ").trimEnd());
+      }
+      for (const k of skipped) log(`mport: skipped ${k.key}: ${k.reason}`);
+    }
+    return 0;
+  }
+  if (command === "update") {
+    if (prebuilt) throw new Error(`mport update: ${configPath} exports a prebuilt router, which can't take the lockfile. Export a function, \`export default ({ lock }) => createRouter(routes, { lock })\`, or a { routes, options } object.`);
+    const keep = Object.entries(lockFile.packages ?? {});
+    const specifiers = [...new Set(keep.map(([k, e]) => e.specifier ?? k))];
+    const graph = lockFile.files ? config.graph || true : config.graph; // a lockfile that has file hashes keeps having them
+    const { lock: next } = await router.build(specifiers, { conflicts: "scope", graph });
+    const updated = [];
+    for (const [key] of toUpdate) {
+      const from = lockFile.packages[key]?.version;
+      const to = next.packages[key]?.version;
+      if (from !== to) updated.push({ key, specifier: lockFile.packages[key].specifier ?? key, name: lockFile.packages[key].name, from, to });
+    }
+    const changed = JSON.stringify(next) !== JSON.stringify(lockFile);
+    if (changed) await writeFile(lockPath, JSON.stringify(next, null, 2) + "\n");
+    if (values.json) log(JSON.stringify({ updated, checked: toUpdate.length, lockfile: lockName, written: changed }, null, 2));
+    else if (!updated.length) log(`mport: ${toUpdate.length} locked entr${toUpdate.length === 1 ? "y" : "ies"} already at the newest version their range allows${changed ? `; ${lockName} rewritten` : ""}`);
+    else {
+      for (const u of updated) log(`mport: ${u.specifier}: ${u.from} -> ${u.to}`);
+      log(`mport: wrote ${lockName}; run \`mport build\` to regenerate the import map`);
+    }
+    return 0;
+  }
   if (command === "resolve") {
     if (!specs[0]) throw new Error(USAGE);
     const { module, trace, ...r } = (await router.resolve(specs[0])) ?? {};

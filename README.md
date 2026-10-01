@@ -315,7 +315,19 @@ export default {
 };
 ```
 
-Flags: `--config`, `--out importmap.json`, `--lock mport.lock.json`, `--relock`, `--conflicts error|scope`, `--graph` (`--max-files`, `--max-depth`), `--trace`. A function config receives the parsed lockfile (`undefined` with `--relock` or when there is none): `export default ({ lock }) => createRouter(routes, { lock })`. A prebuilt router can't take a lockfile, so `--lock`/`--relock` with one is an error and `build` leaves the lock file alone. Details: [docs/api.md#the-cli](docs/api.md#the-cli).
+Flags: `--config`, `--out importmap.json`, `--lock mport.lock.json`, `--relock`, `--conflicts error|scope`, `--graph` (`--max-files`, `--max-depth`), `--trace`, `--json`. A function config receives the parsed lockfile (`undefined` with `--relock` or when there is none): `export default ({ lock }) => createRouter(routes, { lock })`. A prebuilt router can't take a lockfile, so `--lock`/`--relock` with one is an error and `build` leaves the lock file alone. Details: [docs/api.md#the-cli](docs/api.md#the-cli).
+
+### Keeping a lockfile current: `mport outdated` and `mport update`
+
+```sh
+npx @johnhenry/mport outdated            # package  current  wanted  latest
+npx @johnhenry/mport outdated --json     # { outdated: [...], skipped: [...] }
+npx @johnhenry/mport update react        # re-resolve react's entries within their ranges, rewrite the lockfile
+npx @johnhenry/mport update              # all of them
+npx @johnhenry/mport build               # then regenerate the import map
+```
+
+`wanted` is the newest version the specifier's own range allows, `latest` the registry's `latest` tag; `update` moves to `wanted`, never past the range. It rewrites the lockfile only: run `build` for the import map. Details: [docs/api.md](docs/api.md#mport-outdated-and-mport-update).
 
 ## In the browser
 

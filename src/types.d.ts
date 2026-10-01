@@ -231,9 +231,17 @@ export interface CircuitBreakerOptions {
   reset?: number | string;
 }
 
+export interface RegistryInfo {
+  versions: string[];
+  tags: Record<string, string>;
+  deprecated?: Set<string>;
+}
+
 export interface RegistryClient {
   /** exact version for a parsed request; GitHub refs and exact versions pass through */
   version(parsed: Pick<ParsedSpecifier, "registry" | "name" | "range">): Promise<string | undefined>;
+  /** the versions, dist-tags and deprecated versions of a package on npm or JSR (optional for custom clients; needed by outdated()) */
+  info?(registry: "npm" | "jsr", name: string): Promise<RegistryInfo>;
   /** entry file for an npm package version (and optional sub-path) */
   entry(name: string, version: string, subpath?: string): Promise<string>;
   /** the package.json of one exact npm version (used by `conflicts: "scope"`; optional for custom clients) */
@@ -363,6 +371,8 @@ export interface Router {
   health: HealthRegistry;
   /** what this router has resolved; build() returns lock.toJSON() */
   lock: Lock;
+  /** the registry client that resolves versions (the `registry` option, else createRegistry()) */
+  registry: RegistryClient;
   /** null for unroutable (relative, URL, non-package scheme) or unmatched specifiers */
   resolve(specifier: string | SpecifierObject, options?: ResolveOptions): Promise<Resolution | null>;
   /** resolve and import, failing over to another provider when the import itself fails */
@@ -467,6 +477,34 @@ export class ResolutionError extends Error { trace?: TraceEvent[] }
 // ---------------------------------------------------------------- registry, import maps, lockfiles, runtime
 
 export function createRegistry(o?: { fetch?: typeof fetch; npm?: string; jsr?: string }): RegistryClient;
+/** npm's version choice: a dist-tag name, else `latest` if it satisfies the range, else the highest satisfying non-deprecated version. Throws ResolutionError. */
+export function pickVersion(name: string, range: string | undefined, info: RegistryInfo): string;
+
+/** One row of outdated(): a locked package that could move. */
+export interface OutdatedRow {
+  key: string;
+  specifier: string;
+  registry: Registry;
+  name: string;
+  range?: string;
+  /** the locked version */
+  current: string;
+  /** the newest version the range allows */
+  wanted: string;
+  /** the registry's `latest` dist-tag */
+  latest: string;
+  /** wanted is newer than current: `mport update` would move it */
+  updatable: boolean;
+  /** latest is newer than current */
+  behindLatest: boolean;
+}
+
+/** Lockfile entries whose range allows a newer version, or that are behind `latest`; entries it can't judge are in `skipped`. */
+export function outdated(
+  lock: Lockfile,
+  o: { registry: RegistryClient; names?: string[]; signal?: AbortSignal },
+): Promise<{ outdated: OutdatedRow[]; skipped: Array<{ key: string; reason: string }> }>;
+
 export function entryOf(pkg: Record<string, unknown>, subpath?: string): string;
 export function entryInfo(pkg: Record<string, unknown>, subpath?: string): { file: string; esm: boolean; hasExports: boolean };
 export function resolveExports(exportsField: unknown, subpath?: string): string | undefined;

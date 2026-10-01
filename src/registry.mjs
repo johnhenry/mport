@@ -25,6 +25,28 @@ const json = async (fetch, url, init) => {
 
 const encodeNpm = (name) => name.replace("/", "%2F");
 
+// npm's rules: a dist-tag name is that tag; otherwise the `latest` tag wins if it
+// satisfies the range, else the highest satisfying version; deprecated versions are
+// passed over unless nothing else matches.
+export function pickVersion(name, range, { versions, tags, deprecated = new Set() }) {
+  if (tags?.[range]) return tags[range];
+  if (range === undefined || range === "" || range === "latest") {
+    if (tags?.latest) return tags.latest;
+  }
+  let found;
+  try {
+    const all = versions.filter((v) => satisfies(v, range || "*"));
+    const pool = all.filter((v) => !deprecated.has(v));
+    const from = pool.length ? pool : all;
+    found = tags?.latest && from.includes(tags.latest) ? tags.latest : from.reduce((best, v) => (best === undefined || compare(v, best) > 0 ? v : best), undefined);
+  } catch (e) {
+    // not a dist-tag and not a range ("react@beta" when there is no beta tag)
+    throw new ResolutionError(`mport: ${name} has no dist-tag "${range}" and it is not a valid range`, { cause: e });
+  }
+  if (!found) throw new ResolutionError(`mport: no version of ${name} satisfies "${range}"`);
+  return found;
+}
+
 export function createRegistry({
   fetch = globalThis.fetch,
   npm = "https://registry.npmjs.org",
@@ -36,27 +58,25 @@ export function createRegistry({
     return memo.get(key);
   };
 
-  // npm's rules: a dist-tag name is that tag; otherwise the `latest` tag wins if it
-  // satisfies the range, else the highest satisfying version; deprecated versions are
-  // passed over unless nothing else matches.
-  const pick = (name, range, versions, tags, deprecated = new Set()) => {
-    if (tags?.[range]) return tags[range];
-    if (range === undefined || range === "" || range === "latest") {
-      if (tags?.latest) return tags.latest;
-    }
-    let found;
-    try {
-      const all = versions.filter((v) => satisfies(v, range || "*"));
-      const pool = all.filter((v) => !deprecated.has(v));
-      const from = pool.length ? pool : all;
-      found = tags?.latest && from.includes(tags.latest) ? tags.latest : from.reduce((best, v) => (best === undefined || compare(v, best) > 0 ? v : best), undefined);
-    } catch (e) {
-      // not a dist-tag and not a range ("react@beta" when there is no beta tag)
-      throw new ResolutionError(`mport: ${name} has no dist-tag "${range}" and it is not a valid range`, { cause: e });
-    }
-    if (!found) throw new ResolutionError(`mport: no version of ${name} satisfies "${range}"`);
-    return found;
-  };
+  // The versions and dist-tags a registry lists for one package (memoized per package, so
+  // many ranges of one package cost one request).
+  const infoOf = (reg, name) =>
+    once(`meta:${reg}:${name}`, async () => {
+      if (reg === "jsr") {
+        const meta = await json(fetch, `${jsr}/${name}/meta.json`);
+        const versions = Object.keys(meta.versions ?? {}).filter((v) => !meta.versions[v].yanked);
+        return { versions, tags: meta.latest ? { latest: meta.latest } : {}, deprecated: new Set() };
+      }
+      const meta = await json(fetch, `${npm}/${encodeNpm(name)}`, {
+        headers: { accept: "application/vnd.npm.install-v1+json" },
+      });
+      const versions = meta.versions ?? {};
+      return {
+        versions: Object.keys(versions),
+        tags: meta["dist-tags"] ?? {},
+        deprecated: new Set(Object.keys(versions).filter((v) => versions[v]?.deprecated)),
+      };
+    });
 
   return {
     /** Exact version for a parsed specifier. GitHub refs pass through untouched. */
@@ -64,21 +84,12 @@ export function createRegistry({
       const { registry, name, range } = parsed;
       if (registry === "github") return Promise.resolve(range);
       if (range && valid(range)) return Promise.resolve(range);
-      if (registry === "jsr") {
-        return once(`jsr:${name}@${range}`, async () => {
-          const meta = await json(fetch, `${jsr}/${name}/meta.json`);
-          const versions = Object.keys(meta.versions ?? {}).filter((v) => !meta.versions[v].yanked);
-          return pick(name, range, versions, meta.latest ? { latest: meta.latest } : {});
-        });
-      }
-      return once(`npm:${name}@${range}`, async () => {
-        const meta = await json(fetch, `${npm}/${encodeNpm(name)}`, {
-          headers: { accept: "application/vnd.npm.install-v1+json" },
-        });
-        const versions = meta.versions ?? {};
-        const deprecated = new Set(Object.keys(versions).filter((v) => versions[v]?.deprecated));
-        return pick(name, range, Object.keys(versions), meta["dist-tags"], deprecated);
-      });
+      return infoOf(registry === "jsr" ? "jsr" : "npm", name).then((m) => pickVersion(name, range, m));
+    },
+
+    /** `{ versions, tags, deprecated }` for a package on `"npm"` or `"jsr"` (memoized). */
+    info(reg, name) {
+      return infoOf(reg === "jsr" ? "jsr" : "npm", name);
     },
 
     /**
