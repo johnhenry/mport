@@ -89,10 +89,10 @@ const toNode = (n) => {
 /** 2. Ordered fallback: try each node in turn. Also accepts { providers, circuitBreaker }. */
 export function fallback(...args) {
   let nodes = args;
-  let health;
+  let breaker;
   if (args.length === 1 && args[0] && !args[0].select && Array.isArray(args[0].providers)) {
     nodes = args[0].providers;
-    health = args[0].circuitBreaker ? new HealthRegistry(args[0].circuitBreaker) : undefined;
+    breaker = args[0].circuitBreaker;
   }
   nodes = nodes.flat().map(toNode);
   return {
@@ -100,6 +100,9 @@ export function fallback(...args) {
     name: `fallback(${nodes.map((n) => n.name).join(",")})`,
     children: nodes,
     async select(req, ctx) {
+      // Its own thresholds, but the router's state: a registry of the router's own (and clock)
+      // when there is one, so the fallback's providers show up in router.health.
+      const health = breaker ? ctx.health?.scoped(breaker) ?? new HealthRegistry({ now: ctx.now, ...breaker }) : undefined;
       const c = health ? { ...ctx, health } : ctx;
       const errors = [];
       for (const node of nodes) {
@@ -260,32 +263,43 @@ export class HealthRegistry {
   }
   #get(name) {
     let s = this.#state.get(name);
-    if (!s) this.#state.set(name, (s = { ok: 0, fail: 0, streak: 0, latency: undefined, openUntil: 0 }));
+    if (!s) this.#state.set(name, (s = { ok: 0, fail: 0, streak: 0, latency: undefined, lastFail: 0 }));
     return s;
+  }
+  // The circuit is derived from the streak and the last failure, so a view with other
+  // thresholds (see `scoped`) judges the same recorded state by its own rules.
+  #openUntil(s) {
+    return s.streak >= this.threshold ? s.lastFail + this.reset : 0;
+  }
+  /**
+   * A view of this registry's state with its own breaker settings. fallback({ providers,
+   * circuitBreaker }) uses one, so its nodes' health still lands in the router's registry.
+   */
+  scoped({ failures = this.threshold, reset = this.reset, now = this.now } = {}) {
+    const view = new HealthRegistry({ failures, reset, now });
+    view.#state = this.#state;
+    return view;
   }
   /** `keepStreak`: count the success but leave the failure streak alone (see `settle`). */
   success(name, ms, { keepStreak = false } = {}) {
     const s = this.#get(name);
     s.ok++;
-    if (!keepStreak) {
-      s.streak = 0;
-      s.openUntil = 0;
-    }
+    if (!keepStreak) s.streak = 0;
     if (Number.isFinite(ms)) s.latency = s.latency === undefined ? ms : s.latency * 0.7 + ms * 0.3;
   }
   /** A deferred success is confirmed (the import completed): reset the streak and close the circuit. */
   settle(name) {
-    const s = this.#get(name);
-    s.streak = 0;
-    s.openUntil = 0;
+    this.#get(name).streak = 0;
   }
   failure(name) {
     const s = this.#get(name);
     s.fail++;
-    if (++s.streak >= this.threshold) s.openUntil = this.now() + this.reset;
+    s.streak++;
+    s.lastFail = this.now();
   }
   isOpen(name) {
-    return (this.#state.get(name)?.openUntil ?? 0) > this.now();
+    const s = this.#state.get(name);
+    return s !== undefined && this.#openUntil(s) > this.now();
   }
   successRate(name) {
     const { ok = 0, fail = 0 } = this.#state.get(name) ?? {};
@@ -295,7 +309,7 @@ export class HealthRegistry {
     return this.#state.get(name)?.latency;
   }
   snapshot() {
-    return Object.fromEntries([...this.#state].map(([k, v]) => [k, { ...v, healthy: !this.isOpen(k) }]));
+    return Object.fromEntries([...this.#state].map(([k, { lastFail, ...v }]) => [k, { ...v, openUntil: this.#openUntil({ ...v, lastFail }), healthy: !this.isOpen(k) }]));
   }
 }
 

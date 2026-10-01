@@ -164,3 +164,33 @@ test("11. the latest dist-tag wins when it satisfies the range; deprecated versi
   assert.equal(await v("alldep", "^1"), "1.1.0", "but used when nothing else does");
   assert.equal(await v("pre", ">=2.0.0-rc.0"), "2.0.0-rc.2", "prerelease ranges still pick the highest");
 });
+
+test("13. fallback({ providers, circuitBreaker }) records into the router's health, on the router's clock", async () => {
+  const now = clock();
+  const fetch = fakeFetch({ ...registryFixtures, "https://esm.sh/*": 503, ...ok("https://cdn.jsdelivr.net/") });
+  const router = createRouter(
+    { "*": fallback({ providers: [esmSh(), jsDelivr()], circuitBreaker: { failures: 1, reset: "10s" } }) },
+    { fetch, now },
+  );
+  const a = await router.resolve("react@19.2.0");
+  assert.equal(a.provider, "jsdelivr");
+  assert.equal(router.health.snapshot()["esm.sh"].fail, 1, "visible in router.health");
+  assert.equal(router.health.isOpen("esm.sh"), false, "the router's own threshold (3) hasn't been reached");
+  const b = await router.resolve("react@19.2.0");
+  assert.ok(b.trace.some((e) => e.type === "skip" && e.provider === "esm.sh" && e.reason === "circuit open"), "the fallback's threshold (1) opened it");
+  now.advance(10_001); // the router's clock, not Date.now()
+  const c = await router.resolve("react@19.2.0");
+  assert.ok(c.trace.some((e) => e.type === "probe" && e.provider === "esm.sh"), "closed again after reset");
+});
+
+test("13. router.import() failures and a fallback's circuit share one state", async () => {
+  const importer = async () => { throw new Error("boom"); };
+  const router = createRouter(
+    { "*": fallback({ providers: [esmSh()], circuitBreaker: { failures: 1 } }) },
+    { fetch: fakeFetch({ ...registryFixtures, ...ok("https://esm.sh/") }), importer },
+  );
+  await assert.rejects(router.import("react@19.2.0"));
+  const r = await router.resolve("react@19.2.0").catch((e) => e);
+  assert.equal(r.name, "RoutingError");
+  assert.ok(r.trace.some((e) => e.reason === "circuit open"), "one failed import opened the fallback's 1-failure circuit");
+});

@@ -381,6 +381,8 @@ export class HealthRegistry {
   settle(name: string): void;
   failure(name: string): void;
   isOpen(name: string): boolean;
+  /** a view sharing this registry's state but judging circuits by other settings */
+  scoped(o?: CircuitBreakerOptions & { now?: () => number }): HealthRegistry;
   /** (ok + 1) / (ok + fail + 1) */
   successRate(name: string): number;
   latency(name: string): number | undefined;

@@ -509,9 +509,12 @@ thrown instead of whatever the node rejected with. Otherwise errors are collecte
 when every node has failed or skipped the result is
 `RoutingError("mport: no provider could serve <specifier>")` with `errors` in node order.
 
-The object form gives the fallback **its own** `HealthRegistry` built from
-`circuitBreaker`, used by its nodes instead of the router's. It uses `Date.now` unless
-`circuitBreaker.now` is given.
+The object form gives the fallback its own circuit-breaker **settings** (`failures`,
+`reset`, optionally `now`) over the router's health **state**: its nodes' successes and
+failures are recorded in `router.health` (and in a shared `health`), on the router's `now`
+clock unless `circuitBreaker.now` is given, and the fallback decides whether a circuit is
+open using its own `failures`/`reset` (via `health.scoped()`). Used outside a router,
+where there is no registry, it builds a private one.
 
 #### race()
 
@@ -650,7 +653,8 @@ milliseconds or a string: `"500ms"`, `"30s"`, `"1m"`, or a bare number of millis
 | `success(name, ms?, { keepStreak? }?)` | `ok++`, streak reset to 0, circuit closed; `ms` updates the smoothed latency (`0.7 × previous + 0.3 × ms`). With `keepStreak: true` it counts the success but leaves the streak and circuit alone |
 | `settle(name)` | streak reset to 0, circuit closed: a deferred success was confirmed |
 | `failure(name)` | `fail++`, `streak++`; when `streak >= failures` the circuit opens until `now() + reset` |
-| `isOpen(name)` | the circuit is open now |
+| `isOpen(name)` | the circuit is open now: `streak >= threshold` and `now() < lastFailure + reset` |
+| `scoped({ failures?, reset?, now? }?)` | a view of the same state judged by other settings (what `fallback({ providers, circuitBreaker })` uses) |
 | `successRate(name)` | `(ok + 1) / (ok + fail + 1)`; 1 for an unknown provider |
 | `latency(name)` | smoothed latency, or `undefined` |
 | `snapshot()` | `{ [name]: { ok, fail, streak, latency, openUntil, healthy } }` for every provider that has recorded a success or failure; `healthy` is `!isOpen` |
