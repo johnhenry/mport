@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.0.0 — npm scope migration (2026-09-28)
 
-Nothing is published yet, so these are folded into `0.0.0` when it ships.
+Not published yet: everything in this entry ships as `0.0.0`. Work since the initial build comes first; the initial build itself is under "Initial build" below.
 
 ### Features
 
@@ -23,7 +23,7 @@ Nothing is published yet, so these are folded into `0.0.0` when it ships.
   step for the owner. `e97add3`.
 - **README `## Family` lists `@johnhenry/workbench`.** `48ac45b`.
 
-## 0.0.0 — npm scope migration (2026-09-28)
+### Initial build (2026-09-28)
 
 **Previously published as `mport`, last unscoped version 1.0.0.** `@johnhenry/mport`
 restarts at `0.0.0` because it is a new address in the `@johnhenry` family, not because
