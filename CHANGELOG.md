@@ -155,6 +155,7 @@ All additive; the one behaviour that changed is that `startup()` can now reject 
   and `injectModulePreload()`, plus example 12. In c196736.
 - **`compileImportMap()` omits integrity for prefix keys in scopes too**, matching the top
   level. In bbbcb6f.
+- **Docs and example 12 put the import map before the modulepreload links.** They printed `renderModulePreload()` first; Firefox ignores an import map that follows a modulepreload (the same rule as for a late map), so every bare import failed there. Chromium and WebKit accept either order; `test/browser/runtime.spec.mjs` pins it per engine. Found by building the `workbench` integration app. In f5417e8.
 - **`build({ graph: true })` no longer throws `TypeError: Invalid URL` when a module is mapped to an
   origin-relative URL** (a `local()` route in the same build): such a module is listed in
   `graph.skipped` and has no `integrity`. Found by building the `workbench` integration app.
