@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>mport runtime fixture</title></head>
+<body>
+<script type="module">
+  // Loads the library the way an app would and exposes it to the tests. No bare imports here:
+  // the tests install import maps after this module has run.
+  import * as mport from "/src/index.mjs";
+  window.mport = mport;
+  window.ready = true;
+</script>
+</body>
+</html>

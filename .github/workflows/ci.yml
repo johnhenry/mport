@@ -34,3 +34,42 @@ jobs:
       - run: npm test
       - name: Examples smoke test
         run: npm run examples
+
+  # The browser runtime (examples pages, startup(), createImporter(), injectImportMap,
+  # injectModulePreload, import-map scopes and integrity) on each engine. Pages are served
+  # from the repo by a static server Playwright starts; every CDN request is stubbed, so
+  # nothing here touches the network apart from installing the browsers.
+  browser:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: npm run test:browser -- --project=${{ matrix.browser }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces-${{ matrix.browser }}
+          path: test-results/
+          retention-days: 7
+
+  # Numbers, not a gate: a slow runner must not fail the build. Output is in the job log.
+  bench:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm run bench
