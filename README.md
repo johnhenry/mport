@@ -277,7 +277,7 @@ npx @johnhenry/mport build react@^19 lit/   # writes importmap.json and mport.lo
 npx @johnhenry/mport resolve react@^19 --trace
 ```
 
-Once the package is installed the command is plain `mport`. By default the CLI reads `mport.config.mjs`. Its default export is either a router or `{ routes, specifiers, scopes, options }`:
+Once the package is installed the command is plain `mport`. By default the CLI reads `mport.config.mjs`. Its default export is a `{ routes, specifiers, scopes, options }` object, a function `({ lock, relock }) => router | object`, or a prebuilt router:
 
 ```js
 // mport.config.mjs
@@ -288,7 +288,7 @@ export default {
 };
 ```
 
-Flags: `--config`, `--out importmap.json`, `--lock mport.lock.json`, `--relock`, `--trace`. When the config exports a router, `--lock` is not applied to it; pass `lock` to your own `createRouter`. Details: [docs/api.md#the-cli](docs/api.md#the-cli).
+Flags: `--config`, `--out importmap.json`, `--lock mport.lock.json`, `--relock`, `--trace`. A function config receives the parsed lockfile (`undefined` with `--relock` or when there is none): `export default ({ lock }) => createRouter(routes, { lock })`. A prebuilt router can't take a lockfile, so `--lock`/`--relock` with one is an error and `build` leaves the lock file alone. Details: [docs/api.md#the-cli](docs/api.md#the-cli).
 
 ## In the browser
 

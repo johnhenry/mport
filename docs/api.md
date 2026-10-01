@@ -946,13 +946,14 @@ global `fetch` (Node 18+; the package declares Node >= 26).
 |---|---|---|---|
 | `--config` | `-c` | `mport.config.mjs` in the working directory, if it exists | the config module |
 | `--out` | `-o` | `importmap.json` | where `build` writes the import map |
-| `--lock` | `-l` | `mport.lock.json` | the lockfile both commands read (if it exists) and `build` writes |
-| `--relock` | | `false` | don't read the lockfile |
+| `--lock` | `-l` | `mport.lock.json` | the lockfile both commands read (if it exists) and `build` writes. Not for prebuilt-router configs (error) |
+| `--relock` | | `false` | don't read the lockfile (not for prebuilt-router configs: error) |
 | `--trace` | | `false` | `resolve` prints the trace too |
 | `--help` | `-h` | | print usage |
 
-**The config module's default export** is either a router (anything with a `resolve`
-function) or `{ routes?, specifiers?, scopes?, options? }`:
+**The config module's default export** is a config object
+`{ routes?, specifiers?, scopes?, options? }`, a function, or a router (anything with a
+`resolve` function):
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -961,9 +962,18 @@ function) or `{ routes?, specifiers?, scopes?, options? }`:
 | `specifiers` | `[]` | what `build` resolves when none are given on the command line |
 | `scopes` | none | passed to `build` |
 
-With no config at all, the default routes are used. When the config exports a router,
-`--lock` is **not** applied to it (pass `lock` to your own `createRouter`), though `build`
-still writes the lockfile.
+With no config at all, the default routes are used.
+
+**A function** is called as `config({ lock, relock, lockPath })` and returns a router or a
+config object. `lock` is the parsed lockfile (`undefined` with `--relock`, or when the file
+doesn't exist), so `export default ({ lock }) => createRouter(routes, { lock })` honours
+`--lock` and `--relock`. It may be `async`.
+
+**A prebuilt router** was constructed before the CLI knew about the lockfile, so it can't
+be given one. Passing `--lock` or `--relock` with it is an error (`--lock has no effect
+because … exports a prebuilt router`), and `build` writes the import map but does **not**
+write the lock file (it says so), rather than overwriting a committed lockfile with one the
+flags never influenced.
 
 **`build`** resolves the specifiers, writes the import map and the lockfile (both as
 two-space JSON with a trailing newline), and prints
