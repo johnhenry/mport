@@ -334,6 +334,11 @@ Use a fresh router per build if the lockfile should contain exactly one build's 
 
 ## Resolution: versions and entry files
 
+The lockfile's `version` is only ever a **resolved** version. A provider with
+`needsVersion: false` (`local()`, `origin()`) is handed the range as written to build its
+URL, but the lock records `version` only when a resolution happened anyway (`local()`
+looks up the entry file, so it does) and otherwise omits it.
+
 The deterministic half, run lazily and only for the providers that need it.
 
 **Versions** (providers with `needsVersion`, which is all built-ins except `local()` and
@@ -341,7 +346,7 @@ The deterministic half, run lazily and only for the providers that need it.
 
 | Situation | Version | Registry request |
 |---|---|---|
-| the lockfile pins a version (and no `relock`) | the pinned one | none |
+| the lockfile pins a version (and no `relock`) | the pinned one, if it is an exact version or a GitHub ref (an entry whose `version` is a range, as older locks recorded for `local()`/`origin()`, is ignored) | none |
 | `resolveVersions: false` | the range as written (may be `undefined`) | none |
 | GitHub | the ref as written | none |
 | an exact version (`19.2.0`) | as written, even if it doesn't exist | none |

@@ -117,7 +117,9 @@ export function createRouter(routes, options = {}) {
     const versions = new Map();
     const getVersion = (reg = req.registry) => {
       if (!versions.has(reg)) {
-        versions.set(reg, pinned?.version !== undefined ? Promise.resolve(pinned.version)
+        // a pin counts only if it is an exact version (or a git ref): older locks recorded the range
+        const pin = pinned?.version !== undefined && (reg === "github" || valid(pinned.version)) ? pinned.version : undefined;
+        versions.set(reg, pin !== undefined ? Promise.resolve(pin)
           : resolveVersions ? lookup(reg)
           : Promise.resolve(req.range));
       }
@@ -179,6 +181,9 @@ export function createRouter(routes, options = {}) {
         const v = p.needsVersion ? await getVersion(reg) : req.range;
         const info = p.needsEntry && needsFile ? await getEntry(reg) : undefined;
         const a = { registry: reg, name: req.name, version: v, path: req.path, entry: info?.file, esm: info?.esm };
+        // what the lockfile may call "version": only a version that was actually resolved
+        const resolved = p.needsVersion ? v : info || pinned?.version !== undefined ? await getVersion(reg) : undefined;
+        if (resolved !== undefined && (reg === "github" || valid(resolved))) a.resolvedVersion = resolved;
         if (info?.unresolved !== undefined) a.skip = `needs an exact version to find its entry file, but "${info.unresolved}" is not one (resolveVersions: false)`;
         return a;
       },
@@ -218,7 +223,7 @@ export function createRouter(routes, options = {}) {
       const { module, trace, ...storable } = out;
       for (const c of caches) c.store.set(cacheKey, storable);
     }
-    lock.set(key, out);
+    lock.set(key, { ...out, version: result.artifact?.resolvedVersion });
     return out;
   }
 

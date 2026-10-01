@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  createRouter, esmSh, jsDelivr, unpkg, jspm, local, fallback, race, verified, cache, HealthRegistry,
+  createRouter, esmSh, jsDelivr, unpkg, jspm, local, origin, fallback, race, verified, cache, HealthRegistry,
 } from "../src/core.mjs";
 import { fakeFetch, registryFixtures, clock, NPM } from "./helpers.mjs";
 
@@ -45,4 +45,21 @@ test("2. resolveVersions:false skips entry-needing providers instead of asking t
   // an exact version needs no lookup, so raw CDNs still work
   const exact = await router.resolve("react@19.2.0");
   assert.equal(exact.url, "https://cdn.jsdelivr.net/npm/react@19.2.0/index.js");
+});
+
+test("3. unversioned providers don't write the range into the lock as a version", async () => {
+  const fetch = fakeFetch({ ...registryFixtures });
+  // origin() serves the range as written: nothing was resolved
+  const v1 = createRouter({ "*": origin("cdn.example.com/npm/") }, { fetch, probe: "none" });
+  const r = await v1.resolve("react@^19");
+  assert.equal(r.url, "https://cdn.example.com/npm/react@^19/");
+  assert.equal(v1.lock.toJSON().packages["react@^19"].version, undefined);
+  // local() had to resolve the version to find the entry, so the lock records that
+  const l = createRouter({ "*": local() }, { fetch, probe: "none" });
+  await l.resolve("react@^19");
+  assert.equal(l.lock.toJSON().packages["react@^19"].version, "19.2.0");
+  // a stale lock that recorded the range is not treated as exact
+  const stale = { packages: { "react@^19": { version: "^19", registry: "npm" } } };
+  const again = createRouter({ "*": esmSh() }, { fetch, probe: "none", lock: stale });
+  assert.equal((await again.resolve("react@^19")).version, "19.2.0");
 });
