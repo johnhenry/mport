@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+Nothing is published yet, so these are folded into `0.0.0` when it ships.
+
+### Features
+
+- **An integrity manifest for html-modules graphs.** `build(specifiers, { html: [url] })`, `htmlGraph(url)` and
+  `mport build --html <url> [--manifest integrity.json]` walk a graph of HTML modules (`<html-import src>`,
+  `<html-export src>`, lazy imports, `<html-import-settings base>`, and the JavaScript they import), hash every file, and
+  write the hashes into the import map's `integrity` and the lockfile's `files` (a changed file rejects the next build).
+  `integrityManifest()` extracts the URL → `sha384-…` object, the shape of an import map's `integrity`, which
+  `@johnhenry/html-modules` takes as `createHTMLModules({ integrity, strict: true })`: one manifest pins HTML modules and
+  JavaScript. HTML is read with html-modules' own `scanHTMLModule`, an optional peer imported on demand (or pass `scan`), never a
+  regex. Example 21, `docs/api.md` "HTML module graphs"; closes johnhenry/html-modules#2 with html-modules `4558a7a`.
+  `48ac45b`.
+- **Size budgets and bench tracking in CI.** `npm run size` fails the new CI `size` job when the packed tarball or the gzip size of
+  any entry point (the file plus its relative imports) passes `package.json` `sizeBudget`; the bench stores its numbers as an
+  artifact and warns (never fails) when a measure is more than 3x worse than `bench/baseline.json`. `e97add3`.
+- **JSR readiness (nothing is published).** `jsr.json` mirrors `package.json`, every entry point carries `@ts-self-types`, a test
+  keeps the two in step, and CI runs `jsr publish --dry-run` (`npm run jsr-dry-run`). Creating the package on jsr.io is a manual
+  step for the owner. `e97add3`.
+- **README `## Family` lists `@johnhenry/workbench`.** `48ac45b`.
+
 ## 0.0.0 — npm scope migration (2026-09-28)
 
 **Previously published as `mport`, last unscoped version 1.0.0.** `@johnhenry/mport`
