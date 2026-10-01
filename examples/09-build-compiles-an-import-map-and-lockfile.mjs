@@ -6,7 +6,7 @@ import { createRouter, esmSh, jsDelivr, jsr, mergeImportMaps } from "@johnhenry/
 import { offlineFetch, registry } from "./_offline.mjs";
 
 const router = createRouter(
-  { "*": esmSh(), "lit*": jsDelivr(), "@std/*": jsr() },
+  { "*": esmSh(), "lit*": [jsDelivr(), esmSh()], "@std/*": jsr() },
   { fetch: offlineFetch(registry), probe: "none" },
 );
 const { importMap, lock } = await router.build(
@@ -17,7 +17,8 @@ assert.deepEqual(importMap, {
   imports: {
     "react": "https://esm.sh/react@19.2.0",
     "react/jsx-runtime": "https://esm.sh/react@19.2.0/jsx-runtime",
-    "lit/": "https://cdn.jsdelivr.net/npm/lit@3.3.1/",
+    // lit has an exports map, so raw jsDelivr skips the "lit/" directory mapping (its subpaths would 404)
+    "lit/": "https://esm.sh/lit@3.3.1/",
     "npm:preact": "https://esm.sh/preact@10.29.8",
     "@std/path": "https://esm.sh/jsr/@std/path@1.1.0",
   },

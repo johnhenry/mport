@@ -18,6 +18,7 @@ export function provider({
   capabilities = [],
   needsEntry = false,
   needsVersion = true,
+  prefix = true,
   url,
   base,
 }) {
@@ -30,6 +31,7 @@ export function provider({
     capabilities,
     needsEntry,
     needsVersion,
+    prefix,
     url,
     base: base ?? ((a) => url({ ...a, path: "", entry: "" }).replace(/\/?$/, "/")),
     select(req, ctx) {
@@ -58,13 +60,13 @@ export const jsDelivr = ({ origin = "https://cdn.jsdelivr.net", esm = false, nam
     registries: esm ? ["npm"] : ["npm", "github"],
     capabilities: esm ? ["browser", "esm-transform"] : ["raw"],
     needsEntry: !esm,
+    prefix: !esm,
     url: (a) => {
       const dir = a.registry === "github" ? "gh" : "npm";
       const ver = a.version ? `@${a.version}` : "";
       if (esm) return `${origin}/npm/${a.name}${ver}${a.path ? `/${a.path}` : ""}/+esm`;
       return `${origin}/${dir}/${a.name}${ver}/${sub(a) ?? ""}`;
     },
-    base: esm ? () => { throw new Error("mport: jsDelivr +esm builds have no prefix base"); } : undefined,
   });
 
 export const unpkg = ({ origin = "https://unpkg.com", name = "unpkg" } = {}) =>

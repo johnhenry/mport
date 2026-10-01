@@ -163,10 +163,11 @@ export function entryInfo(pkg, subpath = "") {
     return /(\.|\/)(module|esm|es)(\.[a-z]+)?\.js$|\/(esm|es|module)\//.test(file);
   };
   const viaExports = resolveExportsWithCondition(pkg.exports, subpath);
-  if (viaExports) return { file: clean(viaExports.file), esm: judge(viaExports.file, viaExports.condition) };
-  if (subpath) return { file: clean(subpath), esm: judge(subpath, null) };
-  if (pkg.module) return { file: clean(pkg.module), esm: !/\.cjs$/.test(pkg.module) };
-  if (pkg.browser_module) return { file: clean(pkg.browser_module), esm: true };
+  const hasExports = pkg.exports != null;
+  if (viaExports) return { file: clean(viaExports.file), esm: judge(viaExports.file, viaExports.condition), hasExports };
+  if (subpath) return { file: clean(subpath), esm: judge(subpath, null), hasExports };
+  if (pkg.module) return { file: clean(pkg.module), esm: !/\.cjs$/.test(pkg.module), hasExports };
+  if (pkg.browser_module) return { file: clean(pkg.browser_module), esm: true, hasExports };
   const file = (typeof pkg.browser === "string" ? pkg.browser : undefined) ?? pkg.main ?? "index.js";
-  return { file: clean(file), esm: judge(file, null) };
+  return { file: clean(file), esm: judge(file, null), hasExports };
 }

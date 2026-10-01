@@ -122,3 +122,27 @@ test("7. two versions of one key throw instead of silently keeping one", async (
   // inside one scope the same rule applies
   assert.throws(() => compileImportMap([], { "/x/": [{ key: "a", url: "u1" }, { key: "a", url: "u2" }] }), /in scope \/x\//);
 });
+
+test("8. a prefix specifier skips jsDelivr({esm:true}) with a reason and the route falls through", async () => {
+  const fetch = fakeFetch({ ...registryFixtures, ...ok("https://esm.sh/"), ...ok("https://cdn.jsdelivr.net/") });
+  const router = createRouter({ "*": [jsDelivr({ esm: true }), esmSh()] }, { fetch });
+  const r = await router.resolve("lit/");
+  assert.equal(r.provider, "esm.sh");
+  assert.equal(r.base, "https://esm.sh/lit@3.3.1/");
+  assert.ok(r.trace.some((e) => e.type === "skip" && e.provider === "jsdelivr-esm" && /prefix/.test(e.reason)));
+  assert.ok(!fetch.log.some((l) => l.url.includes("jsdelivr")), "never probed");
+});
+
+test("9. raw CDNs skip a prefix specifier when the package has an exports map", async () => {
+  const fetch = fakeFetch({ ...registryFixtures, ...ok("https://esm.sh/"), ...ok("https://cdn.jsdelivr.net/") });
+  const router = createRouter({ "*": [jsDelivr(), unpkg(), esmSh()] }, { fetch });
+  const r = await router.resolve("lit/"); // lit has "exports"
+  assert.equal(r.provider, "esm.sh");
+  assert.equal(r.trace.filter((e) => e.type === "skip" && /exports map/.test(e.reason)).length, 2);
+  // a package without an exports map keeps its directory mapping
+  const plain = await router.resolve("@scope/pkg/");
+  assert.equal(plain.provider, "jsdelivr");
+  assert.equal(plain.base, "https://cdn.jsdelivr.net/npm/@scope/pkg@1.2.3/");
+  // a non-prefix specifier of the same package is unaffected
+  assert.equal((await router.resolve("lit")).provider, "jsdelivr");
+});

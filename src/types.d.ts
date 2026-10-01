@@ -115,6 +115,8 @@ export interface Artifact {
   entry?: string;
   /** whether `entry` looks like an ES module (see entryInfo) */
   esm?: boolean;
+  /** whether the package has an `exports` map (raw CDNs skip prefix specifiers for those) */
+  hasExports?: boolean;
 }
 
 export interface TraceEvent {
@@ -176,6 +178,8 @@ export interface Provider extends Node {
   capabilities: string[];
   needsEntry: boolean;
   needsVersion: boolean;
+  /** false: skips prefix specifiers ("lit/") */
+  prefix: boolean;
   url(artifact: Artifact): string;
   base(artifact: Artifact): string;
 }
@@ -223,7 +227,7 @@ export interface RegistryClient {
   /** entry file for an npm package version (and optional sub-path) */
   entry(name: string, version: string, subpath?: string): Promise<string>;
   /** entry file plus whether it is an ES module */
-  entryInfo(name: string, version: string, subpath?: string): Promise<{ file: string; esm: boolean }>;
+  entryInfo(name: string, version: string, subpath?: string): Promise<{ file: string; esm: boolean; hasExports: boolean }>;
 }
 
 export interface RouterOptions {
@@ -318,6 +322,8 @@ export interface ProviderDefinition {
   needsEntry?: boolean;
   /** resolve the exact version before building the URL (default true) */
   needsVersion?: boolean;
+  /** serves a directory for prefix specifiers like "lit/" (default true; false skips them) */
+  prefix?: boolean;
   url(artifact: Artifact): string;
   /** directory URL for prefix specifiers (default: url() with empty path/entry, plus "/") */
   base?(artifact: Artifact): string;
@@ -383,7 +389,7 @@ export class HealthRegistry {
 
 /** Every provider in a fallback or race failed or was skipped. `errors` holds each one. */
 export class RoutingError extends AggregateError { trace?: TraceEvent[] }
-/** A node declined without trying (unsupported registry, excluded, build mismatch, missing capability, open circuit, CommonJS, cache miss). */
+/** A node declined without trying (unsupported registry, excluded, build mismatch, missing capability, open circuit, CommonJS, prefix unsupported, cache miss or expiry). */
 export class SkipError extends Error { trace?: TraceEvent[] }
 /** verified() got a non-OK response or bytes whose hash differs from the pinned one. */
 export class IntegrityError extends Error { trace?: TraceEvent[] }
@@ -394,7 +400,7 @@ export class ResolutionError extends Error { trace?: TraceEvent[] }
 
 export function createRegistry(o?: { fetch?: typeof fetch; npm?: string; jsr?: string }): RegistryClient;
 export function entryOf(pkg: Record<string, unknown>, subpath?: string): string;
-export function entryInfo(pkg: Record<string, unknown>, subpath?: string): { file: string; esm: boolean };
+export function entryInfo(pkg: Record<string, unknown>, subpath?: string): { file: string; esm: boolean; hasExports: boolean };
 export function resolveExports(exportsField: unknown, subpath?: string): string | undefined;
 
 export function compileImportMap(resolved: Array<Pick<Resolution, "key" | "url"> & Partial<Resolution>>, scoped?: Record<string, Array<Pick<Resolution, "key" | "url"> & Partial<Resolution>>>): ImportMap;

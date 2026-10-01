@@ -42,7 +42,7 @@ lit@^3</textarea>
           <label>target <select id="target"><option>browser</option><option>raw</option></select></label>
           <label>probe <select id="probe"><option>head</option><option>none</option></select></label>
           <label><input type="checkbox" id="jsrRoute" checked> <code>"@std/*": jsr()</code></label>
-          <label><input type="checkbox" id="litRoute"> <code>"lit*": jsDelivr()</code></label>
+          <label><input type="checkbox" id="litRoute"> <code>"lit*": [jsDelivr(), esmSh()]</code></label>
         </div>
       </fieldset>
 
@@ -167,7 +167,7 @@ lit@^3</textarea>
     return `${pinnedLock ? 'import { readFile } from "node:fs/promises";\n' : ""}import { createRouter, ${used.join(", ")} } from "@johnhenry/mport";
 
 const router = createRouter({
-  "*": ${node},${$("#jsrRoute").checked ? `\n  "@std/*": jsr(),` : ""}${$("#litRoute").checked ? `\n  "lit*": jsDelivr(),` : ""}
+  "*": ${node},${$("#jsrRoute").checked ? `\n  "@std/*": jsr(),` : ""}${$("#litRoute").checked ? `\n  "lit*": [jsDelivr(), esmSh()],` : ""}
 }, {
   probe: "${$("#probe").value}",
   target: "${$("#target").value}",
@@ -188,7 +188,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
     }[$("#strategy").value]();
     const routes = { "*": star };
     if ($("#jsrRoute").checked) routes["@std/*"] = jsr();
-    if ($("#litRoute").checked) routes["lit*"] = jsDelivr();
+    if ($("#litRoute").checked) routes["lit*"] = [jsDelivr(), esmSh()];
     return createRouter(routes, {
       fetch: simulatedFetch,
       importer: simulatedImport,
@@ -389,8 +389,8 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
       ],
     },
     {
-      id: "namespace", code: "const router = createRouter({\n  \"*\": esmSh(),          // everything else\n  \"@std/*\": jsr(),       // the Deno standard library comes from JSR\n  \"lit*\": jsDelivr(),    // Lit's raw files from jsDelivr\n});\nconst { importMap, lock } = await router.build([\"preact@^10\", \"@std/path@^1\", \"lit@^3/\"]);\n// <script type=\"importmap\">{ \"imports\": { \"preact\": \u2026, \"@std/path\": \u2026, \"lit/\": \u2026 } }<\/script>", title: "Route by package name", blurb: "Different packages from different places, compiled to an import map.",
-      what: "Routes are matched by package name, most specific first: <code>@std/*</code> goes to JSR, <code>lit*</code> to jsDelivr, and everything else to esm.sh. The result compiles to a standard import map and a lockfile (see the tabs under the results).",
+      id: "namespace", code: "const router = createRouter({\n  \"*\": esmSh(),          // everything else\n  \"@std/*\": jsr(),       // the Deno standard library comes from JSR\n  \"lit*\": [jsDelivr(), esmSh()], // Lit: raw files if possible\n});\nconst { importMap, lock } = await router.build([\"preact@^10\", \"@std/path@^1\", \"lit@^3/\"]);\n// <script type=\"importmap\">{ \"imports\": { \"preact\": \u2026, \"@std/path\": \u2026, \"lit/\": \u2026 } }<\/script>", title: "Route by package name", blurb: "Different packages from different places, compiled to an import map.",
+      what: "Routes are matched by package name, most specific first: <code>@std/*</code> goes to JSR, <code>lit*</code> to jsDelivr (then esm.sh), and everything else to esm.sh. The result compiles to a standard import map and a lockfile (see the tabs under the results).",
       notice: [
         "<b>@std/path</b> is a JSR package: the lookup goes to the JSR registry, and the lockfile entry says <code>\"registry\": \"jsr\"</code>.",
         "<b>lit/</b> ends in <code>/</code>, so the import map gets a <em>prefix</em> mapping: <code>import \"lit/decorators.js\"</code> works too.",
@@ -404,7 +404,7 @@ const { importMap, lock } = await router.build(${JSON.stringify(specs())});`;
       checks: ({ runs: [a] }) => [
         ["preact → esm.sh (the catch-all route)", served(a, "preact@^10") === "esm.sh"],
         ["@std/path → JSR, recorded with registry \"jsr\"", served(a, "@std/path@^1") === "jsr" && a.get("@std/path@^1").r.registry === "jsr"],
-        ["lit/ → jsDelivr, as a prefix mapping", served(a, "lit@^3/") === "jsdelivr" && a.get("lit@^3/").r.key === "lit/"],
+        ["lit/ → esm.sh, as a prefix mapping (jsDelivr skipped: Lit has an exports map)", served(a, "lit@^3/") === "esm.sh" && a.get("lit@^3/").r.key === "lit/"],
       ],
     },
     {

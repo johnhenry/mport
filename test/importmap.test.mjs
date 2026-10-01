@@ -4,13 +4,13 @@ import { createRouter, esmSh, jsDelivr, mergeImportMaps, injectImportMap } from 
 import { fakeFetch, registryFixtures } from "./helpers.mjs";
 
 test("build() compiles exact, prefix and scoped mappings plus a lockfile", async () => {
-  const router = createRouter({ "*": esmSh(), "lit*": jsDelivr() }, { probe: "none", fetch: fakeFetch(registryFixtures) });
-  const { importMap, lock } = await router.build(["react@^19", "lit/", "npm:react@18.3.1"], {
+  const router = createRouter({ "*": esmSh(), "@scope/*": jsDelivr() }, { probe: "none", fetch: fakeFetch(registryFixtures) });
+  const { importMap, lock } = await router.build(["react@^19", "@scope/pkg/", "npm:react@18.3.1"], {
     scopes: { "https://legacy.example.com/": { react: "react@18.3.1" } },
   });
   assert.deepEqual(importMap.imports, {
     "react": "https://esm.sh/react@19.2.0",
-    "lit/": "https://cdn.jsdelivr.net/npm/lit@3.3.1/",
+    "@scope/pkg/": "https://cdn.jsdelivr.net/npm/@scope/pkg@1.2.3/",
     "npm:react": "https://esm.sh/react@18.3.1",
   });
   assert.deepEqual(importMap.scopes, { "https://legacy.example.com/": { react: "https://esm.sh/react@18.3.1" } });

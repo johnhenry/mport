@@ -276,8 +276,7 @@ losing probes can still be appended for a moment after `resolve()` returns.
 (the package or version can't exist, or the registry is unreachable); `RoutingError`
 (a fallback or race ran out of providers); `SkipError` or `IntegrityError` when the
 route is a single provider or `verified()` node that declined; a plain `Error` from a
-provider that can't build the URL (`jsr({ via: "jsr.io" })` without a path; a prefix
-specifier on `jsDelivr({ esm: true })`). Whatever it rejects with gets a `trace`
+provider that can't build the URL (`jsr({ via: "jsr.io" })` without a path). Whatever it rejects with gets a `trace`
 property. See [Errors](#errors).
 
 ### router.import()
@@ -385,8 +384,10 @@ the reason shown:
 | not in `exclude` | `excluded` |
 | a pinned build (`options.build` or the lockfile) equals the provider's build | `serves build "<b>", locked to "<pin>"` |
 | the provider has every required capability | `lacks <cap>, <cap>` |
+| a prefix specifier needs a provider that serves directories (`prefix`, default true) | `serves no directory (prefix) mapping` |
 | the provider's circuit is closed | `circuit open` |
 | (after resolving the artifact) an entry file can be found: with `resolveVersions: false` and a range or tag, `needsEntry` providers can't | `needs an exact version to find its entry file, but "<range>" is not one (resolveVersions: false)` |
+| (after resolving the artifact) a prefix specifier on a `needsEntry` provider needs a package without an `exports` map | `<name> has an exports map, so a directory prefix on a raw file CDN would 404 its subpaths (…)` |
 | (after resolving the artifact) the entry is not CommonJS, unless `allowCommonJS` | `<entry> is CommonJS; raw file CDNs can't serve it to browsers (…)` |
 
 Then the URL is built and [probed](#probing).
@@ -397,7 +398,7 @@ Then the URL is built and [probed](#probing).
 |---|---|---|---|---|---|---|
 | `esmSh({ origin?, name? })` | `esm.sh` | `esm.sh` | npm, jsr, github | browser, esm-transform, types | no | `https://esm.sh/[jsr/\|gh/]<name>[@<version>][/<path>]` |
 | `jsDelivr({ origin?, name? })` | `jsdelivr` | `npm` | npm, github | raw | yes | `https://cdn.jsdelivr.net/<npm\|gh>/<name>[@<version>]/<entry or path>` |
-| `jsDelivr({ esm: true, origin?, name? })` | `jsdelivr-esm` | `jsdelivr-esm` | npm | browser, esm-transform | no | `https://cdn.jsdelivr.net/npm/<name>[@<version>][/<path>]/+esm` (no prefix specifiers) |
+| `jsDelivr({ esm: true, origin?, name? })` | `jsdelivr-esm` | `jsdelivr-esm` | npm | browser, esm-transform | no | `https://cdn.jsdelivr.net/npm/<name>[@<version>][/<path>]/+esm` (skips prefix specifiers) |
 | `unpkg({ origin?, name? })` | `unpkg` | `npm` | npm | raw | yes | `https://unpkg.com/<name>[@<version>]/<entry or path>` |
 | `jspm({ origin?, name? })` | `jspm` | `jspm` | npm | browser, esm-transform | yes | `https://ga.jspm.io/npm:<name>[@<version>]/<entry or path>` |
 | `jsr({ origin?, name? })` | `jsr` | `esm.sh` | jsr | browser, esm-transform, types | no | `https://esm.sh/jsr/<name>[@<version>][/<path>]` |
@@ -421,12 +422,21 @@ Notes that follow from the table:
 - `github()` defaults to jsDelivr's `"npm"` build, so it can stand in for other raw mirrors
   of a GitHub-hosted package only if they serve the same files.
 - A prefix specifier (`lit/`) maps to the provider's `base()`: its URL with an empty
-  path and entry, ending in `/`. `jsDelivr({ esm: true })` has no base and rejects.
+  path and entry, ending in `/`. Two kinds of provider **skip** a prefix specifier (with a
+  reason, so the route carries on) instead of failing:
+  - `jsDelivr({ esm: true })`: it serves bundles, not directories (provider option
+    `prefix: false`);
+  - raw providers (`needsEntry`: `jsDelivr()`, `unpkg()`, `jspm()`, `local()`) when the
+    package has an `exports` map. `"react/"` would map to `…/react@19.2.0/`, but
+    `import "react/jsx-runtime"` then asks for `…/react@19.2.0/jsx-runtime`, a file that
+    does not exist (the exports map points somewhere else), so it would 404. Route such
+    packages to an ESM-transforming CDN (esm.sh) for prefix mappings, or map each subpath
+    as its own key. Packages without an `exports` map keep the directory mapping.
 
 #### provider()
 
 ```ts
-provider({ name, build?, registries?, capabilities?, needsEntry?, needsVersion?, url, base? }): Provider
+provider({ name, build?, registries?, capabilities?, needsEntry?, needsVersion?, prefix?, url, base? }): Provider
 ```
 
 Define your own provider.
@@ -439,10 +449,11 @@ Define your own provider.
 | `capabilities` | `string[]` | `[]` | matched against the `capabilities` option |
 | `needsEntry` | `boolean` | `false` | resolve the entry file (and run the CommonJS check) before `url()` |
 | `needsVersion` | `boolean` | `true` | resolve the exact version before `url()`; with `false` the artifact carries the range as written |
+| `prefix` | `boolean` | `true` | serves a directory for prefix specifiers; `false` skips them with a reason |
 | `url(artifact)` | function | required (`TypeError` without it) | the URL for an artifact |
 | `base(artifact)` | function | `url()` with empty path and entry, plus a trailing `/` | the directory URL for prefix specifiers |
 
-Returns `{ kind: "provider", name, build, registries, capabilities, needsEntry, needsVersion, url, base, select }`.
+Returns `{ kind: "provider", name, build, registries, capabilities, needsEntry, needsVersion, prefix, url, base, select }`.
 Built-in factories return the same shape, and spreading one (`{ ...esmSh(), registries: ["jsr"] }`)
 is how `jsr()` and `github()` are built.
 
@@ -693,7 +704,7 @@ lookup:npm registry → resolved:npm registry → probe:esm.sh → fail:esm.sh �
 | `SkipError` | `Error` | a node declined without trying | Normally ends up in a `RoutingError`'s `errors`; reaches the caller directly when the route is a single provider, cache or `prefer()` |
 | `IntegrityError` | `Error` | `verified()` got a non-OK response or a hash mismatch | As above: collected by `fallback()` / `race()`, direct from a lone `verified()` |
 | `TypeError` | | an invalid specifier ([parseSpecifier](#parsespecifier)); a string inside a strategy; a non-node argument to a strategy; `provider()` without `url`; an unsupported `sri` algorithm; a bad duration string | Synchronous for strategy/provider construction |
-| `Error` | | `jsr({ via: "jsr.io" })` without a path; a prefix specifier on `jsDelivr({ esm: true })`; the CLI's usage errors | |
+| `Error` | | `jsr({ via: "jsr.io" })` without a path; the CLI's usage errors | |
 | `signal.reason` | | the caller's `AbortSignal` aborted | Whatever you passed to `abort()` (a `DOMException` `AbortError` by default) |
 
 `resolve()` attaches `trace` to whatever object it rejects with. All four mport classes
@@ -797,7 +808,7 @@ createRegistry({ fetch? = globalThis.fetch, npm? = "https://registry.npmjs.org",
 | Method | Returns |
 |---|---|
 | `version({ registry, name, range })` | the exact version per the [resolution table](#resolution-versions-and-entry-files) |
-| `entryInfo(name, version, subpath?)` | `{ file, esm }` from `GET <npm>/<name>/<version>` |
+| `entryInfo(name, version, subpath?)` | `{ file, esm, hasExports }` from `GET <npm>/<name>/<version>` |
 | `entry(name, version, subpath?)` | `entryInfo(...).file` |
 
 All memoized per client; failures are evicted. Errors are `ResolutionError`s as listed
@@ -806,10 +817,10 @@ under [Errors](#errors).
 ### entryInfo()
 
 ```ts
-entryInfo(pkg: packageJson, subpath? = ""): { file: string, esm: boolean }
+entryInfo(pkg: packageJson, subpath? = ""): { file: string, esm: boolean, hasExports: boolean }
 ```
 
-The file to import for a package (or a sub-path), and whether it is an ES module. The
+The file to import for a package (or a sub-path), whether it is an ES module, and whether the package has an `exports` field (`hasExports`). The
 file is chosen in this order:
 
 1. `exports`, mapped through [`resolveExports`](#resolveexports) (conditions `browser`,

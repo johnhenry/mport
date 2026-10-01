@@ -47,7 +47,11 @@ export async function select(p, req, ctx) {
   const health = ctx.health;
   if (health?.isOpen(p.name)) throw skip(ctx, p, "circuit open");
 
+  if (req.prefix && p.prefix === false) throw skip(ctx, p, "serves no directory (prefix) mapping");
   const artifact = await ctx.artifact(p, registry);
+  if (req.prefix && p.needsEntry && artifact.hasExports) {
+    throw skip(ctx, p, `${req.name} has an exports map, so a directory prefix on a raw file CDN would 404 its subpaths (use an ESM-transforming CDN, or map each subpath)`);
+  }
   if (artifact.skip) throw skip(ctx, p, artifact.skip);
   if (artifact.esm === false && !ctx.allowCommonJS) {
     throw skip(ctx, p, `${artifact.entry} is CommonJS; raw file CDNs can't serve it to browsers (use an ESM-transforming CDN, or allowCommonJS)`);

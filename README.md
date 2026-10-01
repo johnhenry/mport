@@ -177,7 +177,7 @@ What each route value means:
 | `npm:lodash-es@4` | explicit npm |
 | `jsr:@std/path@^1` | JSR |
 | `github:user/repo@ref/path` or `gh:` | a GitHub repository |
-| `lit/` (trailing slash) | a prefix mapping in the import map |
+| `lit/` (trailing slash) | a prefix mapping in the import map. Raw file CDNs (jsDelivr, unpkg, jspm, `local()`) skip it for packages with an `exports` map, and `jsDelivr({ esm: true })` always skips it, so the route falls through to e.g. esm.sh |
 | `{ name, version, path, registry }` | object form |
 | `./x.js`, `/x.js`, `https://…`, `node:fs`, `@scope` | not routed: `resolve()` returns `null` |
 

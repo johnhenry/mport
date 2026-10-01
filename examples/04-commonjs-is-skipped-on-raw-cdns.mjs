@@ -21,10 +21,10 @@ const lenient = createRouter({ "*": jsDelivr() }, { fetch, probe: "none", allowC
 assert.equal((await lenient.resolve("react@^19")).url, "https://cdn.jsdelivr.net/npm/react@19.2.0/index.js");
 
 // The detection rules, as entryInfo() applies them to a package.json:
-assert.deepEqual(entryInfo({ main: "index.js" }), { file: "index.js", esm: false });
-assert.deepEqual(entryInfo({ type: "module", main: "index.js" }), { file: "index.js", esm: true });
-assert.deepEqual(entryInfo({ main: "index.js", module: "dist/x.js" }), { file: "dist/x.js", esm: true });
-assert.deepEqual(entryInfo({ exports: { ".": { require: "./a.cjs", import: "./a.js" } } }), { file: "a.js", esm: true });
-assert.deepEqual(entryInfo({ main: "dist/lib.esm.js" }), { file: "dist/lib.esm.js", esm: true }, "ESM by naming convention");
+assert.deepEqual(entryInfo({ main: "index.js" }), { file: "index.js", esm: false, hasExports: false });
+assert.deepEqual(entryInfo({ type: "module", main: "index.js" }), { file: "index.js", esm: true, hasExports: false });
+assert.deepEqual(entryInfo({ main: "index.js", module: "dist/x.js" }), { file: "dist/x.js", esm: true, hasExports: false });
+assert.deepEqual(entryInfo({ exports: { ".": { require: "./a.cjs", import: "./a.js" } } }), { file: "a.js", esm: true, hasExports: true });
+assert.deepEqual(entryInfo({ main: "dist/lib.esm.js" }), { file: "dist/lib.esm.js", esm: true, hasExports: false }, "ESM by naming convention");
 
 console.log("04 ok:", show(react.trace).join(" → "));

@@ -310,14 +310,15 @@ test("an import probe that finishes after the race is decided is traced as lost,
 
 test("entryInfo tells ESM from CommonJS", async () => {
   const { entryInfo } = await import("../src/registry.mjs");
-  assert.deepEqual(entryInfo({ main: "index.js" }), { file: "index.js", esm: false });
-  assert.deepEqual(entryInfo({ type: "module", main: "index.js" }), { file: "index.js", esm: true });
-  assert.deepEqual(entryInfo({ main: "index.js", module: "dist/x.module.js" }), { file: "dist/x.module.js", esm: true });
-  assert.deepEqual(entryInfo({ exports: { ".": { browser: "./dist/p.module.js", require: "./dist/p.js" } } }), { file: "dist/p.module.js", esm: true });
-  assert.deepEqual(entryInfo({ exports: { ".": { browser: { import: "./b.js", require: "./b.cjs" } } } }), { file: "b.js", esm: true });
-  assert.deepEqual(entryInfo({ exports: { ".": { default: "./index.js" } } }), { file: "index.js", esm: false });
-  assert.deepEqual(entryInfo({ exports: "./x.cjs", type: "module" }), { file: "x.cjs", esm: false });
-  assert.deepEqual(entryInfo({ exports: { "./hooks": { import: "./hooks/h.js" } } }, "hooks"), { file: "hooks/h.js", esm: true });
+  const pick = ({ file, esm }) => ({ file, esm }); // hasExports has its own test (9)
+  assert.deepEqual(pick(entryInfo({ main: "index.js" })), { file: "index.js", esm: false });
+  assert.deepEqual(pick(entryInfo({ type: "module", main: "index.js" })), { file: "index.js", esm: true });
+  assert.deepEqual(pick(entryInfo({ main: "index.js", module: "dist/x.module.js" })), { file: "dist/x.module.js", esm: true });
+  assert.deepEqual(pick(entryInfo({ exports: { ".": { browser: "./dist/p.module.js", require: "./dist/p.js" } } })), { file: "dist/p.module.js", esm: true });
+  assert.deepEqual(pick(entryInfo({ exports: { ".": { browser: { import: "./b.js", require: "./b.cjs" } } } })), { file: "b.js", esm: true });
+  assert.deepEqual(pick(entryInfo({ exports: { ".": { default: "./index.js" } } })), { file: "index.js", esm: false });
+  assert.deepEqual(pick(entryInfo({ exports: "./x.cjs", type: "module" })), { file: "x.cjs", esm: false });
+  assert.deepEqual(pick(entryInfo({ exports: { "./hooks": { import: "./hooks/h.js" } } }, "hooks")), { file: "hooks/h.js", esm: true });
 });
 
 test("lockfile keys are the specifier as written; the entry says which registry served it", async () => {

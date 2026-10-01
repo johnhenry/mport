@@ -180,7 +180,7 @@ export function createRouter(routes, options = {}) {
       async artifact(p, reg = req.registry) {
         const v = p.needsVersion ? await getVersion(reg) : req.range;
         const info = p.needsEntry && needsFile ? await getEntry(reg) : undefined;
-        const a = { registry: reg, name: req.name, version: v, path: req.path, entry: info?.file, esm: info?.esm };
+        const a = { registry: reg, name: req.name, version: v, path: req.path, entry: info?.file, esm: info?.esm, hasExports: info?.hasExports };
         // what the lockfile may call "version": only a version that was actually resolved
         const resolved = p.needsVersion ? v : info || pinned?.version !== undefined ? await getVersion(reg) : undefined;
         if (resolved !== undefined && (reg === "github" || valid(resolved))) a.resolvedVersion = resolved;
