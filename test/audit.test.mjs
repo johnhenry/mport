@@ -206,3 +206,32 @@ test("14a. esm.sh URLs pin ?target= (integrity can't depend on the User-Agent); 
   const bare = createRouter({ "*": esmSh({ esTarget: null }) }, { fetch, probe: "none" });
   assert.equal((await bare.resolve("react@19.2.0")).url, "https://esm.sh/react@19.2.0");
 });
+
+test("14c. verified() with the default head probe downloads once per candidate (no HEAD + GET)", async () => {
+  const log = [];
+  const fetch = fakeFetch({ ...registryFixtures, "https://esm.sh/*": "export default 1" }, { log });
+  const router = createRouter({ "*": verified(esmSh()) }, { fetch });
+  const r = await router.resolve("react@19.2.0");
+  assert.match(r.integrity, /^sha384-/);
+  assert.deepEqual(log.filter((l) => l.url.startsWith("https://esm.sh/")).map((l) => l.method), ["GET"]);
+  assert.deepEqual(r.trace.map((e) => e.type).filter((t) => t !== "lookup" && t !== "resolved"), ["probe", "ok"]);
+  assert.equal(router.health.snapshot()["esm.sh"].ok, 1);
+  // a bad response fails over, is traced and counts against the provider
+  const bad = createRouter({ "*": [verified(esmSh()), verified(jsDelivr())] }, {
+    fetch: fakeFetch({ ...registryFixtures, "https://esm.sh/*": 503, ...ok("https://cdn.jsdelivr.net/") }),
+  });
+  const b = await bad.resolve("react@19.2.0");
+  assert.equal(b.provider, "jsdelivr");
+  assert.equal(bad.health.snapshot()["esm.sh"].fail, 1);
+  // a cache hit under verified() is still re-hashed
+  const gets = [];
+  const store = new Map();
+  const c = createRouter({ "*": verified(fallback(cache({ store }), esmSh())) }, {
+    fetch: fakeFetch({ ...registryFixtures, "https://esm.sh/*": "export default 1" }, { log: gets }),
+  });
+  await c.resolve("react@19.2.0");
+  gets.length = 0;
+  const second = await c.resolve("react@19.2.0");
+  assert.equal(second.cached, true);
+  assert.deepEqual(gets.map((l) => l.method), ["GET"], "hashed again, once");
+});

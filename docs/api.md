@@ -583,7 +583,8 @@ SRI hash (`sha256`, `sha384` or `sha512`). The expected hash is `options.integri
 the lockfile entry's `integrity`.
 
 - The download responds non-OK: rejects with `IntegrityError("… responded <status>")`.
-  No trace event, no health failure.
+  With the `"head"` probe this is the probe failing, so it is traced `fail` and counts
+  against the provider's health; with another probe it is neither.
 - The hash differs from the expected one: records a health failure, traces
   `{ type: "fail", phase: "integrity", provider, url, error: "expected …, got …" }`, and
   rejects with `IntegrityError`.
@@ -591,9 +592,12 @@ the lockfile entry's `integrity`.
   map's `integrity` field and the lockfile.
 
 With no expected hash it only records what it downloaded: trust on first use. Wrap each
-mirror (`race(verified(a), verified(b))`) so a bad one fails over. The download is in
-addition to the probe, so a `"head"` probe plus `verified()` is two requests per
-candidate; `verified()` downloads even with `probe: "none"`.
+mirror (`race(verified(a), verified(b))`) so a bad one fails over. With the default `"head"`
+probe the download **is** the probe (one `GET` per candidate, traced `probe` → `ok`, health
+recorded from it; a non-OK answer is a failed candidate), not a `HEAD` followed by a `GET`
+of the same URL. With any other probe (`"import"`, a function) the probe runs first and the
+download follows; `verified()` downloads even with `probe: "none"`. A cache hit inside
+`verified()` is hashed again.
 
 #### cache()
 

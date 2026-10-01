@@ -65,13 +65,13 @@ export async function select(p, req, ctx) {
   const t0 = ctx.now();
   note(ctx, { type: "probe", provider: p.name, url });
   try {
-    const { module } = (await ctx.probe(url, { provider: p, signal: ctx.signal })) ?? {};
+    const { module, integrity } = (await ctx.probe(url, { provider: p, signal: ctx.signal })) ?? {};
     const ms = ctx.now() - t0;
     health?.success(p.name, ms, { keepStreak: ctx.deferStreak });
     // A probe that can't be cancelled (import) may finish after the race was decided.
     if (ctx.signal?.aborted) note(ctx, { type: "aborted", provider: p.name, url, ms, reason: "lost the race" });
     else note(ctx, { type: "ok", provider: p.name, url, ms });
-    return { url, provider: p.name, build: p.build, artifact, module };
+    return { url, provider: p.name, build: p.build, artifact, module, integrity };
   } catch (e) {
     const aborted = isAbort(e, ctx.signal);
     if (!aborted) health?.failure(p.name);
@@ -197,10 +197,16 @@ export function verified(node, { algorithm = "sha384" } = {}) {
     name: `verified(${node.name})`,
     children: [node],
     async select(req, ctx) {
-      const r = await node.select(req, ctx);
-      const res = await ctx.fetch(r.url, { signal: ctx.signal });
-      if (!res.ok) throw new IntegrityError(`mport: ${r.url} responded ${res.status}`);
-      const integrity = await sri(await res.arrayBuffer(), algorithm);
+      const download = async (url, { signal }) => {
+        const res = await ctx.fetch(url, { signal });
+        if (!res.ok) throw new IntegrityError(`mport: ${url} responded ${res.status}`);
+        return { integrity: await sri(await res.arrayBuffer(), algorithm) };
+      };
+      // With the default HEAD probe the download is the probe: one GET answers both
+      // "is it up?" and "what are its bytes?", instead of a HEAD then a GET of the same URL.
+      const r = await node.select(req, ctx.probeMode === "head" ? { ...ctx, probe: download } : ctx);
+      // (a cache hit, or a node that never probed, still needs its bytes hashed)
+      const integrity = !r.cached && r.integrity ? r.integrity : (await download(r.url, { signal: ctx.signal })).integrity;
       const expected = ctx.integrity;
       if (expected && expected !== integrity) {
         ctx.health?.failure(r.provider);
