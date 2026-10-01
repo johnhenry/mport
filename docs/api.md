@@ -574,13 +574,18 @@ candidate; `verified()` downloads even with `probe: "none"`.
 #### cache()
 
 ```ts
-cache({ store? = new Map(), name? = "cache", prefix? = "mport:" }?): Node
+cache({ store? = new Map(), name? = "cache", prefix? = "mport:", ttl? }?): Node
 ```
 
 A node that serves remembered resolutions without probing. The router writes every
 successful, non-cached resolution into **every** `cache()` node in its whole route
-table (not only the route that served it), keyed
-`<registry>:<name>@<version>/<path>`. `store` is a `Map`, anything with `get`/`set`, or
+table (not only the route that served it), keyed by the **specifier as written** plus the
+target, the matched route and any lockfile pin (never the resolved version, so a hit needs
+no network). Each record holds the resolution and its artifact (`registry`, `version`,
+`entry`), so a hit returns the same `registry`, `entry` and lock data as a miss. `ttl`
+(milliseconds or `"30s"`/`"5m"`) expires records: an older one traces `skip` (reason
+`expired`) and is re-resolved and overwritten; without `ttl` records never expire.
+`store` is a `Map`, anything with `get`/`set`, or
 a `Storage` such as `localStorage` (detected by `getItem`; values are JSON under
 `prefix + key`, and storage errors are ignored).
 
@@ -590,8 +595,10 @@ circuit, rejects with `SkipError` without a trace event; otherwise it traces
 `{ type: "ok", provider: <cache name>, url, cached: true }` and returns the stored
 resolution with `cached: true`.
 
-The cache key contains the exact version, so a lookup still happens for ranges; the
-cache saves the probe, not the registry request.
+A hit makes no request at all, not even a registry lookup, so a `cache()` over a
+persistent `store` serves `react@^19` while offline. The flip side: a range stays pinned to
+whatever it resolved to until the record expires (`ttl`) or the store is cleared; a changed
+lockfile pin is a different key.
 
 #### sri()
 

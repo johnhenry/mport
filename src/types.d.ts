@@ -346,7 +346,8 @@ export function adaptive(...nodes: Array<Node | [Node, number]>): Node;
 export function weighted(node: Node, weight: number): Node;
 export function prefer(byTarget: Record<string, Node>): Node;
 export function verified(node: Node, o?: { algorithm?: "sha256" | "sha384" | "sha512" }): Node;
-export function cache(o?: { store?: CacheStore; name?: string; prefix?: string }): Node;
+/** `ttl`: milliseconds or a duration string ("30s", "5m"); records older than that are re-resolved. Default: never expire. */
+export function cache(o?: { store?: CacheStore; name?: string; prefix?: string; ttl?: number | string }): Node;
 export function sri(data: BufferSource, algorithm?: "sha256" | "sha384" | "sha512"): Promise<string>;
 
 export interface HealthState {

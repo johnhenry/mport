@@ -219,7 +219,8 @@ export async function sri(buffer, algorithm = "sha384") {
  * resolution into each cache() in its tree; on a hit the stored URL is reused
  * without probing. `store` is a Map or a Storage (localStorage).
  */
-export function cache({ store = new Map(), name = "cache", prefix = "mport:" } = {}) {
+export function cache({ store = new Map(), name = "cache", prefix = "mport:", ttl } = {}) {
+  const maxAge = ttl === undefined ? undefined : typeof ttl === "string" ? parseDuration(ttl) : ttl;
   const kv = typeof store.getItem === "function"
     ? {
         get: (k) => { try { const v = store.getItem(prefix + k); return v ? JSON.parse(v) : undefined; } catch { return undefined; } },
@@ -231,7 +232,11 @@ export function cache({ store = new Map(), name = "cache", prefix = "mport:" } =
     name,
     store: kv,
     async select(req, ctx) {
-      const hit = kv.get(await ctx.cacheKey());
+      const hit = kv.get(ctx.cacheKey());
+      if (hit && maxAge !== undefined && !(ctx.now() - hit.cachedAt <= maxAge)) {
+        note(ctx, { type: "skip", provider: name, reason: "expired" });
+        throw new SkipError("cache: expired");
+      }
       if (!hit) { note(ctx, { type: "skip", provider: name, reason: "miss" }); throw new SkipError("cache: miss"); }
       if (ctx.build && hit.build !== ctx.build) throw new SkipError("cache: build mismatch");
       if (ctx.exclude?.has(hit.provider) || ctx.health?.isOpen(hit.provider)) throw new SkipError("cache: provider unavailable");

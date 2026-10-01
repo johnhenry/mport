@@ -187,10 +187,10 @@ export function createRouter(routes, options = {}) {
         if (info?.unresolved !== undefined) a.skip = `needs an exact version to find its entry file, but "${info.unresolved}" is not one (resolveVersions: false)`;
         return a;
       },
-      async cacheKey() {
-        const v = resolveVersions || pinned ? await getVersion() : req.range;
-        return `${req.registry}:${req.name}@${v ?? ""}/${req.path}`;
-      },
+      // The specifier as written, never its resolved version: a hit must not need the
+      // network. The route and target keep differently-routed requests apart, and a
+      // lockfile pin is part of the request (a new pin is a different resolution).
+      cacheKey: () => [ctx.target, hit.node.name, key + (req.prefix ? "/" : ""), pinned?.version ?? ""].join("|"),
     };
 
     let result;
@@ -219,9 +219,10 @@ export function createRouter(routes, options = {}) {
     };
     if (req.prefix) out.base = baseOf(hit.node, result, out);
     if (!result.cached && caches.length) {
-      const cacheKey = await ctx.cacheKey();
       const { module, trace, ...storable } = out;
-      for (const c of caches) c.store.set(cacheKey, storable);
+      storable.artifact = result.artifact;
+      storable.cachedAt = now();
+      for (const c of caches) c.store.set(ctx.cacheKey(), storable);
     }
     lock.set(key, { ...out, version: result.artifact?.resolvedVersion });
     return out;

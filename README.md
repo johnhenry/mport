@@ -229,7 +229,7 @@ route("npm:*",
 | 6 | `fallback({ providers, circuitBreaker: { failures: 3, reset: "30s" } })`, or the router's `circuitBreaker` option | Health-aware failover. After *n* failures in a row a provider is skipped until `reset` has passed |
 | 7 | `prefer({ browser: esmSh(), raw: jsDelivr(), default: unpkg() })`, or the `capabilities` option | Choose by target or capability. `resolve(spec, { target: "raw" })` |
 | | `verified(node)` | Fetches the chosen URL, computes its SRI hash, and rejects on a mismatch with the lockfile (or `integrity`). Wrap each mirror so a bad one fails over: `race(verified(a), verified(b))` |
-| | `cache({ store })` | Reuses remembered resolutions without probing. `store` is a `Map` (the default) or `localStorage` |
+| | `cache({ store, ttl? })` | Reuses remembered resolutions without probing or any network request, keyed by the specifier as written (works offline). `store` is a `Map` (the default) or `localStorage`; `ttl` expires records |
 
 ### Probing
 
@@ -362,7 +362,7 @@ Every export, from `@johnhenry/mport` (all of them), `@johnhenry/mport/firefox` 
 | [`adaptive`](docs/api.md#adaptive), [`weighted`](docs/api.md#weighted) | `(...[node, weight])`, `(node, weight)` | Ordered by weight and health |
 | [`prefer`](docs/api.md#prefer) | `({ [target]: node, default? })` | By target |
 | [`verified`](docs/api.md#verified) | `(node, { algorithm? })` | SRI check against the pinned hash |
-| [`cache`](docs/api.md#cache) | `({ store?, name?, prefix? }?)` | Remembered resolutions |
+| [`cache`](docs/api.md#cache) | `({ store?, name?, prefix?, ttl? }?)` | Remembered resolutions |
 | [`sri`](docs/api.md#sri) | `(bytes, algorithm?) → Promise<string>` | Compute an SRI hash |
 | [`HealthRegistry`](docs/api.md#healthregistry) | `new ({ failures?, reset?, now? }?)` | Per-provider health and circuit breaker |
 | [`RoutingError`, `SkipError`, `IntegrityError`, `ResolutionError`](docs/api.md#errors) | classes | See the errors table |

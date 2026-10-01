@@ -76,3 +76,34 @@ test("4. the output lock holds only this build's resolutions; the input lock onl
   assert.deepEqual(Object.keys(lock.packages), ["react@^19"]);
   assert.equal(lock.packages["react@^19"].version, "19.0.0", "the pin is still honoured");
 });
+
+test("5+6. cache() hits offline, keep entry/registry, and respect a ttl", async () => {
+  const store = new Map();
+  const now = clock();
+  const routes = () => ({ "*": fallback(cache({ store, ttl: "1m" }), jsDelivr()) });
+  const first = createRouter(routes(), { fetch: fakeFetch({ ...registryFixtures, ...ok("https://cdn.jsdelivr.net/") }), now });
+  const a = await first.resolve("react@^19");
+  assert.equal(a.cached, false);
+  assert.equal(a.entry, "index.js");
+
+  // a second router, no network at all: the key is the specifier as written
+  const dead = fakeFetch({}, { log: [] });
+  const offline = createRouter(routes(), { fetch: (...x) => { dead.log.push(x); throw new Error("offline"); }, now });
+  const b = await offline.resolve("react@^19");
+  assert.equal(b.cached, true);
+  assert.equal(dead.log.length, 0, "no request, not even a registry lookup");
+  assert.equal(b.url, a.url);
+  assert.equal(b.entry, "index.js", "entry survives a cache hit");
+  assert.equal(b.registry, "npm");
+  assert.equal(b.version, "19.2.0");
+  assert.equal(offline.lock.toJSON().packages["react@^19"].entry, "index.js", "and reaches the lock");
+
+  // a different range is a different request
+  await assert.rejects(offline.resolve("react@^18"));
+  // after the ttl the entry is expired
+  now.advance(61_000);
+  const c = createRouter(routes(), { fetch: fakeFetch({ ...registryFixtures, ...ok("https://cdn.jsdelivr.net/") }), now });
+  const r = await c.resolve("react@^19");
+  assert.equal(r.cached, false);
+  assert.ok(r.trace.some((e) => e.type === "skip" && e.reason === "expired"));
+});
