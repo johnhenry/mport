@@ -25,6 +25,15 @@ examples and the CLI. `docs/api.md` is the behavioural contract: change it with 
 CI (`.github/workflows/ci.yml`) runs steps 1-4 in this order on Node 26; match it locally.
 Node 24 also runs everything today, but 26 is the floor that is tested.
 
+## Browser tests and the type-check
+
+`npm run test:browser` is a separate CI job per engine, not part of the loop above (it needs
+browsers installed). Pages are served by `test/browser/serve.mjs` on port 8731 and never reuse an
+existing server; all CDN traffic is answered by `test/browser/stubs.mjs`. Firefox ignores an
+import map added after a module has loaded, so `startup()` can't work there (documented,
+asserted by the "late import maps" spec). `tsc` finds `@types/*` in parent directories, so run the
+type-check in a fresh clone (step 6) before trusting a pass that needs an ambient type.
+
 ## Repo-specific gotchas
 
 - **Raw file CDNs cannot serve CommonJS, and fixtures must say which format they are.**
