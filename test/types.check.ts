@@ -11,6 +11,8 @@ import mport, {
   type Resolution, type TraceEvent, type Lockfile, type ImportMap, type HealthState, type Router, type ConflictReport, type GraphReport, parseImports, outdated, pickVersion, type OutdatedRow,
 } from "@johnhenry/mport";
 import * as core from "@johnhenry/mport/core";
+import mportRollup, { mportRollup as namedRollup, type RollupPluginOptions } from "@johnhenry/mport/rollup";
+import mportVite, { mportVite as namedVite } from "@johnhenry/mport/vite";
 import firefoxDefault from "@johnhenry/mport/firefox";
 
 export async function check(): Promise<void> {
@@ -104,6 +106,19 @@ export async function check(): Promise<void> {
   void [winner, v1info.cached, v1info.trace];
   void MPort("a.cdn/", "b.cdn/");
   void [DEFAULT_ORIGINS.length, DEFAULT_CACHE_KEY, firefoxDefault];
+
+  // bundler plugins
+  const rollupOptions: RollupPluginOptions = { mode: "importmap", versions: { react: "^19" }, packageJson: true, exclude: /^@local\//, specifiers: ["lit@3"], fileName: "map.json", build: { conflicts: "scope", graph: true } };
+  const rollupPlugin = mportRollup(router, rollupOptions);
+  void [namedRollup === mportRollup, rollupPlugin.name, rollupPlugin.api.specifiers(), (await rollupPlugin.api.importMap()).importMap.imports];
+  const vitePlugin = mportVite(router, { mode: "external", dev: true, exclude: ["react"], packageJson: "package.json" });
+  void [namedVite === mportVite, vitePlugin.enforce, vitePlugin.apply({}, { command: "build" })];
+  // the real bundlers' plugin types accept ours (vite and rollup are devDependencies)
+  const asVite: import("vite").Plugin = mportVite(router);
+  const asRollup: import("rollup").Plugin = mportRollup(router);
+  void [asVite, asRollup];
+  // @ts-expect-error mode is "external" or "importmap"
+  mportVite(router, { mode: "inline" });
 
   // core has no v1 functions
   void core.createRouter;

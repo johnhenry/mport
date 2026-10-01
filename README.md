@@ -329,6 +329,23 @@ npx @johnhenry/mport build               # then regenerate the import map
 
 `wanted` is the newest version the specifier's own range allows, `latest` the registry's `latest` tag; `update` moves to `wanted`, never past the range. It rewrites the lockfile only: run `build` for the import map. Details: [docs/api.md](docs/api.md#mport-outdated-and-mport-update).
 
+## Bundler plugins
+
+Resolve bare imports through a router while bundling, with the same routes, lockfile and strategies:
+
+```js
+// vite.config.js (production builds)
+import mportVite from "@johnhenry/mport/vite";
+export default { plugins: [mportVite(router, { packageJson: true })] };            // imports become CDN URLs
+export default { plugins: [mportVite(router, { mode: "importmap" })] };            // imports stay bare; the import map is injected into index.html
+
+// rollup.config.js
+import mportRollup from "@johnhenry/mport/rollup";
+export default { input: "src/main.js", plugins: [mportRollup(router, { versions: { react: "^19" } })], output: { dir: "dist" } };
+```
+
+`mode: "external"` (default) rewrites `import "react"` to `https://esm.sh/react@19.2.0?target=es2022`; `mode: "importmap"` keeps it bare and gives you the import map (Vite injects it; Rollup emits `importmap.json`), which can carry `conflicts: "scope"` scopes and `graph` integrity through the `build` option. Neither package is a dependency of mport. Options and limits: [docs/api.md](docs/api.md#bundler-plugins).
+
 ## In the browser
 
 ```js

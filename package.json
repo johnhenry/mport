@@ -32,6 +32,14 @@
       "types": "./src/core.d.ts",
       "default": "./src/core.mjs"
     },
+    "./vite": {
+      "types": "./src/vite.d.ts",
+      "default": "./src/vite.mjs"
+    },
+    "./rollup": {
+      "types": "./src/rollup.d.ts",
+      "default": "./src/rollup.mjs"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -84,11 +92,14 @@
     "example:13": "node examples/13-conflicting-versions-get-scopes.mjs",
     "example:14": "node examples/14-whole-graph-integrity-in-the-lockfile.mjs",
     "example:15": "node examples/15-outdated-and-update-keep-the-lockfile-current.mjs",
+    "example:16": "node examples/16-rollup-plugin-routes-bare-imports.mjs",
     "demo": "deno -A examples/demo.mjs",
     "demo:firefox": "deno -A examples/demo.firefox.mjs",
     "demo:html": "python3 -m http.server 8712"
   },
   "devDependencies": {
-    "typescript": "^7.0.2"
+    "rollup": "^4.63.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
   }
 }

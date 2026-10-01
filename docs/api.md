@@ -31,6 +31,7 @@ tutorial; this is the reference.
 - [Registry helpers and CommonJS detection](#registry-helpers-and-commonjs-detection) (incl. `outdated()`)
 - [Browser runtime helpers](#browser-runtime-helpers)
 - [semver](#semver)
+- [Bundler plugins](#bundler-plugins)
 - [The CLI](#the-cli)
 - [The v1 API](#the-v1-api)
 - [Constants](#constants)
@@ -42,9 +43,11 @@ tutorial; this is the reference.
 | `@johnhenry/mport` | `src/index.mjs` | everything in `./core`, plus the v1 functions `mport` (also the default export), `MPort`, `MPortURL` |
 | `@johnhenry/mport/firefox` | `src/firefox.mjs` | the same names as `@johnhenry/mport`. No file it loads contains a two-argument `import()`, which older Firefox rejects at parse time. See [Firefox](#the-firefox-entry-point). |
 | `@johnhenry/mport/core` | `src/core.mjs` | the router, providers, strategies, registry, import-map, lockfile, runtime and semver exports, without the v1 functions |
+| `@johnhenry/mport/vite` | `src/vite.mjs` | [`mportVite`](#bundler-plugins) (also the default export). Node-side build tooling. |
+| `@johnhenry/mport/rollup` | `src/rollup.mjs` | [`mportRollup`](#bundler-plugins) (also the default export). Node-side build tooling. |
 | `mport` (bin) | `bin/mport.mjs` | the [CLI](#the-cli) |
 
-All three module entry points are ES modules with no dependencies. The package is plain
+The first three module entry points are ES modules with no dependencies. The package is plain
 JavaScript that runs in browsers, Deno and Node; the router's defaults (`fetch`,
 `import()`) are the host's.
 
@@ -57,9 +60,9 @@ The `./core` exports, grouped:
 | Providers | [`provider`](#provider), [`esmSh`](#built-in-providers), [`jsDelivr`](#built-in-providers), [`unpkg`](#built-in-providers), [`jspm`](#built-in-providers), [`jsr`](#built-in-providers), [`github`](#built-in-providers), [`local`](#built-in-providers), [`custom`](#custom), [`origin`](#origin), [`DEFAULT_ORIGINS`](#constants) |
 | Strategies | [`fallback`](#fallback), [`race`](#race), [`adaptive`](#adaptive), [`weighted`](#weighted), [`prefer`](#prefer), [`verified`](#verified), [`cache`](#cache), [`sri`](#sri) |
 | Health and errors | [`HealthRegistry`](#healthregistry), [`RoutingError`](#errors), [`SkipError`](#errors), [`IntegrityError`](#errors), [`ResolutionError`](#errors) |
-| Registry | [`createRegistry`](#createregistry), [`entryInfo`](#entryinfo), [`entryOf`](#entryof), [`resolveExports`](#resolveexports) |
+| Registry | [`createRegistry`](#createregistry), [`pickVersion`](#pickversion), [`outdated`](#outdated), [`entryInfo`](#entryinfo), [`entryOf`](#entryof), [`resolveExports`](#resolveexports) |
 | Import maps | [`compileImportMap`](#compileimportmap), [`mergeImportMaps`](#mergeimportmaps), [`renderImportMap`](#renderimportmap), [`modulePreloads`](#modulepreloads), [`renderModulePreload`](#rendermodulepreload) |
-| Lockfiles | [`createLock`](#createlock), [`lockKey`](#lockkey) |
+| Lockfiles | [`createLock`](#createlock), [`lockKey`](#lockkey), [`parseImports`](#parseimports) |
 | Browser runtime | [`injectImportMap`](#injectimportmap), [`injectModulePreload`](#injectmodulepreload), [`startup`](#startup), [`createImporter`](#createimporter) |
 | Misc | [`semver`](#semver), [`DEFAULT_CACHE_KEY`](#constants) |
 
@@ -1167,6 +1170,80 @@ the operator, hyphen ranges (`1.2.3 - 2`), and unions (`||`). A prerelease only 
 a comparator that names a prerelease on the same `major.minor.patch` (`^20` does not
 match `20.0.0-rc.1`; `>=20.0.0-rc.0` does). An unparseable range throws `TypeError`
 (`resolve()` reports it as a `ResolutionError`).
+
+## Bundler plugins
+
+```js
+// vite.config.js
+import mportVite from "@johnhenry/mport/vite";
+import { createRouter, esmSh } from "@johnhenry/mport";
+const router = createRouter({ "*": esmSh() }, { lock: JSON.parse(readFileSync("mport.lock.json")) });
+export default { plugins: [mportVite(router, { packageJson: true })] };
+
+// rollup.config.js
+import mportRollup from "@johnhenry/mport/rollup";
+export default { input: "src/main.js", plugins: [mportRollup(router, { mode: "importmap" })], output: { dir: "dist" } };
+```
+
+```ts
+mportRollup(router: Router, options?: RollupPluginOptions): Plugin
+mportVite(router: Router, options?: VitePluginOptions): Plugin
+```
+
+Both resolve every **bare package import** the bundler meets (`react`, `react/jsx-runtime`,
+`@scope/pkg/x.js`, `jsr:@std/path`) through `router.resolve()`. `vite` and `rollup` are not
+dependencies of this package (they are dev dependencies here, used by its tests); the
+plugins are plain objects the bundler calls.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `mode` | `"external"` | `"external"`: the import becomes the resolved CDN URL in the output, and the bundler treats it as external. `"importmap"`: the import stays bare and the build yields the import map for it (below) |
+| `versions` | `{}` | `{ name: range }` for imports with no version. Without one the specifier has none, so the router uses its lockfile's pin for that specifier if it has one, else the registry's `latest` |
+| `packageJson` | `false` | `true`: read `dependencies`, `devDependencies` and `peerDependencies` ranges from `package.json` (Vite: in `root`; Rollup: in the working directory) or give a path. Values that aren't registry ranges (`workspace:`, `file:`, git URLs) are ignored. `versions` wins |
+| `exclude` | none | leave these to the bundler: package names or exact sources, a `RegExp` tested on the source, or a predicate |
+| `specifiers` | `[]` | importmap mode: specifiers always put in the map (what only `router.import()` or a dynamic computed import uses) |
+| `build` | `{}` | importmap mode: `router.build()` options for the map: `conflicts`, `graph`, `scopes` |
+| `fileName` | `"importmap.json"` | Rollup, importmap mode: the emitted asset |
+| `dev` | `false` | Vite: also resolve in the dev server (`"external"` mode only) |
+
+What the plugins decide, per import:
+
+- **Not touched** (the bundler handles it as usual): relative and absolute paths, URLs,
+  `node:` and Node built-ins, prefix imports (`lit/`), `\0` virtual modules, anything in
+  `exclude`, and a specifier **no route matches** (`router.resolve()` returned `null`).
+  In Vite also `vite` and `vite/*` (its own virtual modules) and every SSR build (Node cannot
+  import an `https:` URL).
+- **A routable package whose lookup fails** (unknown package, no version satisfies the
+  range, registry unreachable, no provider can serve it) **fails the build** with the
+  router's `ResolutionError`/`RoutingError`; it is not left bare.
+- Resolution happens once per distinct specifier per plugin instance, and uses the router
+  exactly as `build` does: its probe, lockfile pins, fallback and integrity strategies.
+  With the default `"head"` probe a build makes real requests; use `probe: "none"` to
+  resolve without checking.
+
+**`"external"` mode** emits `import React from "https://esm.sh/react@19.2.0?target=es2022"`.
+The browser needs nothing else. It maps each import to **one** URL (the router's first
+choice at build time): there is no runtime failover, and no `integrity` (a URL in an
+`import` statement cannot carry one).
+
+**`"importmap"` mode** keeps `import "react"` and builds the map from the specifiers it
+routed (plus `specifiers`) with `router.build()`: Rollup emits it as the `fileName` asset
+(`importmap.json`), for you to inline or serve; Vite injects
+`<script type="importmap">…</script>` at the start of `index.html`'s `<head>`, before the
+module script. Because it goes through `build()`, `build: { conflicts: "scope" }` and
+`build: { graph: true }` give the page scopes and `integrity` for every file. Only HTML
+entry pages get the injection: a Vite library or SSR build has none.
+
+`plugin.api` exposes the instance: `api.specifiers()` (what has been routed) and
+`api.importMap()` (the `build()` result).
+
+**Limits.** Only imports the bundler reports are seen: `import(expr)` with a computed
+specifier is not (list it in `specifiers`). Vite's dev server is untouched by default
+because it pre-bundles dependencies itself, so dev and production can differ; `dev: true`
+makes dev import CDN URLs too. The Vite plugin is `enforce: "pre"`; a plugin that resolves
+bare imports earlier (an alias) wins. CommonJS-only packages need a provider that can serve
+them (the router's CommonJS check applies as in `resolve()`). The Rollup tests here run
+against Rollup 4 and Vite 8 (Rolldown-based); other majors are untested.
 
 ## The CLI
 

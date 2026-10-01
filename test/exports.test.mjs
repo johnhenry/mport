@@ -27,6 +27,11 @@ test("core.d.ts declares exactly the exports of the core entry point", async () 
   assert.deepEqual(declaredValues(await read("core.d.ts")), sorted(Object.keys(await import("../src/core.mjs"))));
 });
 
+test("vite.d.ts and rollup.d.ts declare exactly the exports of their entry points", async () => {
+  assert.deepEqual(declaredValues(await read("vite.d.ts")), sorted(Object.keys(await import("../src/vite.mjs"))));
+  assert.deepEqual(declaredValues(await read("rollup.d.ts")), sorted(Object.keys(await import("../src/rollup.mjs"))));
+});
+
 test("semver namespace declares the runtime semver functions", async () => {
   const dts = await read("types.d.ts");
   const block = /export namespace semver \{([\s\S]*?)\n\}/.exec(dts)[1];
