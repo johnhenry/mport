@@ -34,7 +34,10 @@ export function compare(a, b) {
 
 // "1" → {major:1}, "1.2" → {major:1,minor:2}, "x"/"*" → {}
 function partial(s) {
-  const [core, pre] = s.replace(/^v/, "").split("-", 2);
+  // the prerelease may itself contain "-" ("1.0.0-beta-2.1"): split on the first one only
+  const bare = s.replace(/^v/, "").replace(/\+.*$/, "");
+  const dash = bare.indexOf("-");
+  const [core, pre] = dash === -1 ? [bare] : [bare.slice(0, dash), bare.slice(dash + 1)];
   const parts = core.split(".");
   const out = {};
   const keys = ["major", "minor", "patch"];

@@ -24,3 +24,11 @@ test("maxSatisfying", () => {
   assert.equal(maxSatisfying(["18.3.1", "19.0.0", "19.2.0", "20.0.0-rc.1"], "^19"), "19.2.0");
   assert.equal(maxSatisfying(["1.0.0"], "^2"), null);
 });
+
+test("10. prerelease tags containing '-' are not truncated", () => {
+  assert.equal(satisfies("1.0.0-beta-2.1", "1.0.0-beta-2.1"), true);
+  assert.equal(satisfies("1.0.0-beta-2.1", "=1.0.0-beta-2.2"), false);
+  assert.equal(satisfies("1.0.0-beta-3", ">=1.0.0-beta-2"), true);
+  assert.equal(satisfies("1.0.0-beta-1", ">=1.0.0-beta-2"), false);
+  assert.equal(satisfies("1.0.0", "1.0.0+build.5"), true, "build metadata is ignored");
+});
