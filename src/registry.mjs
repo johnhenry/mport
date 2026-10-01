@@ -1,6 +1,6 @@
 // Deterministic resolution: specifier + range → exact version (and, for raw
 // file CDNs, an entry file). This half never depends on which CDN is up.
-import { valid, maxSatisfying } from "./semver.mjs";
+import { valid, satisfies, compare } from "./semver.mjs";
 
 export class ResolutionError extends Error {
   name = "ResolutionError";
@@ -36,14 +36,20 @@ export function createRegistry({
     return memo.get(key);
   };
 
-  const pick = (name, range, versions, tags) => {
+  // npm's rules: a dist-tag name is that tag; otherwise the `latest` tag wins if it
+  // satisfies the range, else the highest satisfying version; deprecated versions are
+  // passed over unless nothing else matches.
+  const pick = (name, range, versions, tags, deprecated = new Set()) => {
     if (tags?.[range]) return tags[range];
     if (range === undefined || range === "" || range === "latest") {
       if (tags?.latest) return tags.latest;
     }
     let found;
     try {
-      found = maxSatisfying(versions, range || "*");
+      const all = versions.filter((v) => satisfies(v, range || "*"));
+      const pool = all.filter((v) => !deprecated.has(v));
+      const from = pool.length ? pool : all;
+      found = tags?.latest && from.includes(tags.latest) ? tags.latest : from.reduce((best, v) => (best === undefined || compare(v, best) > 0 ? v : best), undefined);
     } catch (e) {
       // not a dist-tag and not a range ("react@beta" when there is no beta tag)
       throw new ResolutionError(`mport: ${name} has no dist-tag "${range}" and it is not a valid range`, { cause: e });
@@ -69,7 +75,9 @@ export function createRegistry({
         const meta = await json(fetch, `${npm}/${encodeNpm(name)}`, {
           headers: { accept: "application/vnd.npm.install-v1+json" },
         });
-        return pick(name, range, Object.keys(meta.versions ?? {}), meta["dist-tags"]);
+        const versions = meta.versions ?? {};
+        const deprecated = new Set(Object.keys(versions).filter((v) => versions[v]?.deprecated));
+        return pick(name, range, Object.keys(versions), meta["dist-tags"], deprecated);
       });
     },
 

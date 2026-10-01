@@ -146,3 +146,21 @@ test("9. raw CDNs skip a prefix specifier when the package has an exports map", 
   // a non-prefix specifier of the same package is unaffected
   assert.equal((await router.resolve("lit")).provider, "jsdelivr");
 });
+
+test("11. the latest dist-tag wins when it satisfies the range; deprecated versions are passed over", async () => {
+  const { createRegistry } = await import("../src/registry.mjs");
+  const meta = (latest, versions) => ({ "dist-tags": { latest }, versions });
+  const fetch = fakeFetch({
+    [`${NPM}/tagged`]: meta("1.1.0", { "1.0.0": {}, "1.1.0": {}, "1.2.0-x": {}, "1.3.0": {} }),
+    [`${NPM}/dep`]: meta("2.0.0", { "1.0.0": {}, "1.1.0": { deprecated: "broken" }, "1.2.0": { deprecated: "broken" } }),
+    [`${NPM}/alldep`]: meta("1.1.0", { "1.0.0": { deprecated: "x" }, "1.1.0": { deprecated: "x" } }),
+    [`${NPM}/pre`]: meta("1.0.0", { "1.0.0": {}, "2.0.0-rc.1": {}, "2.0.0-rc.2": {} }),
+  });
+  const reg = createRegistry({ fetch });
+  const v = (name, range) => reg.version({ registry: "npm", name, range });
+  assert.equal(await v("tagged", "^1"), "1.1.0", "latest satisfies ^1, so it beats the higher 1.3.0 (as npm does)");
+  assert.equal(await v("tagged", "^1.2"), "1.3.0", "latest doesn't satisfy: highest match");
+  assert.equal(await v("dep", "^1"), "1.0.0", "deprecated versions are skipped when others match");
+  assert.equal(await v("alldep", "^1"), "1.1.0", "but used when nothing else does");
+  assert.equal(await v("pre", ">=2.0.0-rc.0"), "2.0.0-rc.2", "prerelease ranges still pick the highest");
+});

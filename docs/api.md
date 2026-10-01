@@ -353,7 +353,7 @@ The deterministic half, run lazily and only for the providers that need it.
 | an exact version (`19.2.0`) | as written, even if it doesn't exist | none |
 | a dist-tag present in the registry (`next`) | the tag's version | one |
 | no range, `""` or `latest` | the `latest` dist-tag | one |
-| any other range | the highest satisfying version (see [semver](#semver)) | one |
+| any other range | npm's rule: the `latest` dist-tag if it satisfies the range, else the highest satisfying version (see [semver](#semver)). Versions marked `deprecated` (npm) are passed over unless nothing else satisfies | one |
 
 npm lookups read `GET <npm>/<name>` with the abbreviated-metadata `accept` header; JSR
 lookups read `GET <jsr>/<name>/meta.json` and ignore yanked versions. Lookups are
