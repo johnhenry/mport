@@ -151,6 +151,7 @@ function skipBraces(src, i) {
 
 // ---------------------------------------------------------------- walking
 
+const HTML_EXT = /\.html?(?:[?#]|$)/i;
 const NOT_MODULES = /\.(json|css|wasm|map|html?|txt|svg|png|jpe?g|gif|webp|avif|woff2?|ttf|otf)$/i;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
@@ -163,11 +164,15 @@ const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
  * root's origin (or one of `origins`) are followed; bare specifiers are collected in
  * `bare` (they need the import map), other origins and schemes in `skipped`.
  *
+ * A root with `html: true` is an HTML module (html-modules): its `<html-import src>` and
+ * `<html-export src>` are followed, with `scan(source, url)` (html-modules' `scanHTMLModule`)
+ * reading them; an HTML module's `.js` imports are followed as JavaScript.
+ *
  * @returns {Promise<{ files: Map<string,string>, truncated: Array, bare: Set<string>, skipped: Array }>}
  */
 export async function walkGraph(roots, {
   fetch, signal, maxFiles = 500, maxDepth = 20, dynamic = false, origins = [], algorithm = "sha384",
-  concurrency = 8, expect = () => undefined, report = () => {},
+  concurrency = 8, expect = () => undefined, report = () => {}, scan,
 }) {
   const files = new Map();
   const bare = new Set();
@@ -184,7 +189,7 @@ export async function walkGraph(roots, {
   let level = [];
   for (const root of roots) {
     const url = new URL(root.url).href;
-    if (!seen.has(url)) { seen.add(url); level.push({ url, depth: 0, root }); }
+    if (!seen.has(url)) { seen.add(url); level.push({ url, depth: 0, root, html: root.html === true }); }
   }
   let fetched = 0;
   while (level.length) {
@@ -207,7 +212,7 @@ export async function walkGraph(roots, {
     for (const kids of children) for (const kid of kids) if (!seen.has(kid.url)) { seen.add(kid.url); level.push(kid); }
   }
 
-  async function visit({ url, depth, root }) {
+  async function visit({ url, depth, root, html }) {
     signal?.throwIfAborted();
     let res;
     try {
@@ -225,19 +230,34 @@ export async function walkGraph(roots, {
       throw new IntegrityError(`mport: integrity mismatch for ${url}: expected ${expected}, got ${integrity}`);
     }
     files.set(url, integrity);
+    if (html && !scan) throw new Error("mport: an HTML module root needs a scanner: pass `scan` (html-modules' scanHTMLModule)");
     const pathname = new URL(url).pathname;
-    if (NOT_MODULES.test(pathname)) return [];
+    if (!html && NOT_MODULES.test(pathname)) return [];
     const kids = [];
     const allowed = new Set([new URL(root.url).origin, ...origins]);
-    for (const spec of parseImports(new TextDecoder().decode(buf), { dynamic })) {
+    let specs; // [{ spec, html }] in the file's own base
+    let base = url;
+    if (html) {
+      let record;
+      try { record = scan(new TextDecoder().decode(buf), url); } catch (e) {
+        throw new IntegrityError(`mport: could not read the HTML module ${url} to follow its imports (${e?.message ?? e})`, { cause: e });
+      }
+      // <html-import-settings base> moves the module's own imports, as the loader applies it.
+      if (record.importSettings?.base) { try { base = new URL(record.importSettings.base, url).href; } catch {} }
+      const refs = [...record.imports, ...record.exports.filter((e) => e.kind === "reexport")];
+      specs = refs.map((r) => ({ spec: r.src, html: r.type ? r.type === "html" : HTML_EXT.test(r.src) }));
+    } else {
+      specs = parseImports(new TextDecoder().decode(buf), { dynamic }).map((spec) => ({ spec, html: false }));
+    }
+    for (const { spec, html: childHtml } of specs) {
       let target;
       if (spec.startsWith("./") || spec.startsWith("../") || spec.startsWith("/") || SCHEME.test(spec)) {
-        try { target = new URL(spec, url); } catch { continue; }
+        try { target = new URL(spec, base); } catch { continue; }
       } else { bare.add(spec); continue; }
       if (target.protocol !== "https:" && target.protocol !== "http:") { skipped.push({ url: spec, from: url, reason: `${target.protocol} is not fetched` }); continue; }
       target.hash = "";
       if (!allowed.has(target.origin)) { skipped.push({ url: target.href, from: url, reason: "other origin" }); continue; }
-      kids.push({ url: target.href, depth: depth + 1, root });
+      kids.push({ url: target.href, depth: depth + 1, root, html: childHtml });
     }
     return kids;
   }
@@ -245,4 +265,58 @@ export async function walkGraph(roots, {
   const truncated = [...truncations.values()];
   for (const t of truncated) report({ url: t.root }, { type: "truncated", phase: "graph", url: t.root, reason: t.reason, limit: t.limit, skipped: t.skipped, examples: t.urls });
   return { files, truncated, bare, skipped };
+}
+
+// ---------------------------------------------------------------- HTML module graphs
+
+/**
+ * The scanner for HTML modules: `scanHTMLModule` of the optional peer `@johnhenry/html-modules`, or the function
+ * you pass. It is imported on demand (the name is not a literal, so a bundler does not pull the peer in).
+ */
+export async function htmlScanner(scan) {
+  if (scan !== undefined) {
+    if (typeof scan !== "function") throw new TypeError("mport: option scan must be a function (source, url) => record, such as html-modules' scanHTMLModule");
+    return scan;
+  }
+  const peer = "@johnhenry/html-modules";
+  let mod;
+  try { mod = await import(peer); } catch (e) {
+    throw new Error(`mport: walking HTML modules needs the optional peer ${peer} (npm install ${peer}) to read <html-import src> and <html-export src>; or pass { scan } (its scanHTMLModule) yourself`, { cause: e });
+  }
+  if (typeof mod.scanHTMLModule !== "function") throw new Error(`mport: ${peer} has no scanHTMLModule(); it is too old to walk HTML module graphs`);
+  return mod.scanHTMLModule;
+}
+
+/**
+ * Hash an html-modules graph: fetch each root (an HTML module URL), read its `<html-import src>` and
+ * `<html-export src>` with html-modules' scanner, follow them (same origin, plus `origins`), and hash every
+ * file. HTML modules are scanned as HTML and the `.js` files they import as JavaScript (their static imports
+ * are followed too). Options are those of `walkGraph` (`maxFiles`, `maxDepth`, `dynamic`, `origins`, `algorithm`,
+ * `concurrency`, `signal`) plus `fetch` (default `globalThis.fetch`) and `scan`.
+ *
+ * `integrity` is the manifest: absolute URL → SRI hash, sorted by URL, the shape of an import map's
+ * `integrity`, which html-modules accepts as `createHTMLModules({ integrity })`.
+ *
+ * @returns {Promise<{ integrity: Record<string,string>, files: number, truncated: Array, bare: string[], skipped: Array }>}
+ */
+export async function htmlGraph(roots, { fetch = (...a) => globalThis.fetch(...a), scan, ...options } = {}) {
+  const list = (Array.isArray(roots) ? roots : [roots]).map((r) => (typeof r === "string" ? r : r?.url));
+  if (!list.length || list.some((u) => typeof u !== "string")) throw new TypeError("mport: htmlGraph needs one or more HTML module URLs");
+  for (const u of list) {
+    let parsed;
+    try { parsed = new URL(u); } catch { throw new TypeError(`mport: htmlGraph roots must be absolute URLs, got "${u}"`); }
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new TypeError(`mport: htmlGraph roots must be http(s) URLs, got "${u}"`);
+  }
+  const reader = await htmlScanner(scan);
+  const { files, truncated, bare, skipped } = await walkGraph(list.map((url) => ({ url, html: true })), { ...options, fetch, scan: reader });
+  return { integrity: Object.fromEntries([...files].sort(([a], [b]) => (a < b ? -1 : 1))), files: files.size, truncated, bare: [...bare].sort(), skipped };
+}
+
+/**
+ * The integrity manifest of a build result, an import map or a lockfile: URL → SRI hash (sorted), the object
+ * html-modules takes as `createHTMLModules({ integrity })` and a page puts in its import map's `integrity`.
+ */
+export function integrityManifest(source) {
+  const table = source?.importMap?.integrity ?? source?.integrity ?? source?.files ?? {};
+  return Object.fromEntries(Object.entries(table).sort(([a], [b]) => (a < b ? -1 : 1)));
 }

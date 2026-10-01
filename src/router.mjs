@@ -19,7 +19,7 @@ import { custom } from "./providers.mjs";
 import { compileImportMap } from "./importmap.mjs";
 import { planConflicts } from "./conflicts.mjs";
 import { addDependencies, DEFAULT_DEPENDENCY_DEPTH } from "./dependencies.mjs";
-import { walkGraph } from "./graph.mjs";
+import { walkGraph, htmlScanner } from "./graph.mjs";
 import { createLock, lockKey } from "./lock.mjs";
 
 export const route = (match, use) => ({ match, use });
@@ -279,11 +279,15 @@ export function createRouter(routes, options = {}) {
      * "scope" keeps the first and scopes the others to the packages that depend on them.
      * `graph`: also fetch each module, follow its static imports and record every file's
      * integrity (see graph.mjs); `true` or { maxFiles, maxDepth, dynamic, origins, algorithm }.
+     * `html`: HTML module URLs (html-modules) to hash with their whole graph (`<html-import src>`, `<html-export src>`,
+     * and the JavaScript they import) into the import map's `integrity` and the lock's `files`: an array of URLs or
+     * { roots, scan, maxFiles, maxDepth, dynamic, origins, algorithm, concurrency }; needs the optional peer
+     * `@johnhenry/html-modules` unless `scan` is given (see graph.mjs `htmlGraph`).
      * `dependencies`: `true` / "prod" also adds each resolved package's manifest `dependencies` as
      * routed entries when its provider serves raw files (see dependencies.mjs), at most
      * `dependencyDepth` (default 5) levels deep; the result's `dependencies` reports what happened.
      */
-    async build(specifiers, { scopes = {}, signal, conflicts = "error", graph = false, dependencies = false, dependencyDepth = DEFAULT_DEPENDENCY_DEPTH } = {}) {
+    async build(specifiers, { scopes = {}, signal, conflicts = "error", graph = false, html = false, dependencies = false, dependencyDepth = DEFAULT_DEPENDENCY_DEPTH } = {}) {
       if (conflicts !== "error" && conflicts !== "scope") throw new TypeError(`mport: build option conflicts must be "error" or "scope", got ${JSON.stringify(conflicts)}`);
       if (dependencies !== false && dependencies !== true && dependencies !== "prod") throw new TypeError(`mport: build option dependencies must be false, true or "prod", got ${JSON.stringify(dependencies)}`);
       if (!Number.isInteger(dependencyDepth) || dependencyDepth < 0) throw new TypeError(`mport: build option dependencyDepth must be a non-negative integer, got ${JSON.stringify(dependencyDepth)}`);
@@ -334,12 +338,28 @@ export function createRouter(routes, options = {}) {
         const roots = [...resolved, ...Object.values(scoped).flat()].filter((r) => !r.key.endsWith("/"));
         ({ files, report: graphReport } = await lockGraph(roots, graph === true ? {} : graph, signal));
       }
+      let htmlReport;
+      if (html) {
+        const { roots: htmlRoots, ...htmlOptions } = Array.isArray(html) ? { roots: html } : html;
+        if (!Array.isArray(htmlRoots) || !htmlRoots.length || htmlRoots.some((u) => typeof u !== "string")) {
+          throw new TypeError("mport: build option html must be an array of HTML module URLs or { roots: [urls], … }");
+        }
+        for (const u of htmlRoots) {
+          let parsed;
+          try { parsed = new URL(u); } catch { throw new TypeError(`mport: build option html needs absolute URLs, got "${u}"`); }
+          if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new TypeError(`mport: build option html needs http(s) URLs, got "${u}"`);
+        }
+        const out = await lockHtml(htmlRoots, htmlOptions, signal);
+        files = Object.fromEntries(Object.entries({ ...files, ...out.files }).sort(([a], [b]) => (a < b ? -1 : 1))); // stable output for a committed map
+        htmlReport = out.report;
+      }
       return {
         importMap: compileImportMap(resolved, scoped, { integrity: files }),
         lock: lock.toJSON(),
         conflicts: report,
         ...(dependencyReport && { dependencies: dependencyReport }),
         ...(graphReport && { graph: graphReport }),
+        ...(htmlReport && { html: htmlReport }),
       };
     },
   };
@@ -378,6 +398,21 @@ export function createRouter(routes, options = {}) {
       if (rec) lock.set(key, { ...rec, integrity: entry });
     }
     return { files: Object.fromEntries(files), report: { files: files.size, truncated, bare: [...bare].sort(), skipped: [...notFetched, ...skipped] } };
+  }
+
+  // Hash an html-modules graph the same way: expectations from the lock's `files`, new hashes written back.
+  async function lockHtml(roots, { scan, ...options }, signal) {
+    const reader = await htmlScanner(scan);
+    const { files, truncated, bare, skipped } = await walkGraph(roots.map((url) => ({ url, html: true })), {
+      ...options,
+      fetch,
+      signal,
+      scan: reader,
+      expect: (url) => pins.getFile(url),
+      report: (root, event) => { try { onEvent?.({ provider: "html", ...event, at: now() }); } catch {} },
+    });
+    for (const [url, integrity] of files) lock.setFile(url, integrity);
+    return { files: Object.fromEntries(files), report: { files: files.size, truncated, bare: [...bare].sort(), skipped } };
   }
 
   /** The provider node that served a Resolution. */

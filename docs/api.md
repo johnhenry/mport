@@ -351,7 +351,7 @@ at runtime only works when the page's import map already covers those.
 ### router.build()
 
 ```ts
-router.build(specifiers: string[], options?: { scopes?, signal?, conflicts?, graph?, dependencies?, dependencyDepth? }): Promise<{ importMap: ImportMap, lock: Lockfile, conflicts: ConflictReport[], dependencies?: DependencyReport, graph?: GraphReport }>
+router.build(specifiers: string[], options?: { scopes?, signal?, conflicts?, graph?, html?, dependencies?, dependencyDepth? }): Promise<{ importMap: ImportMap, lock: Lockfile, conflicts: ConflictReport[], dependencies?: DependencyReport, graph?: GraphReport, html?: GraphReport }>
 ```
 
 Resolves every specifier concurrently and compiles an [import map](#import-maps).
@@ -368,6 +368,11 @@ Any other value is a `TypeError`. The result's `conflicts` array holds one
 
 `graph` (default off) is `true` or [`GraphOptions`](#whole-graph-integrity-graph); the result then
 has a `graph` report.
+
+`html` (default off) is an array of HTML module URLs or `{ roots, scan?, …GraphOptions }`; see
+[HTML module graphs](#html-module-graphs-an-integrity-manifest-for-html-modules). The result then has an `html`
+report (same shape as `graph`), and the hashes join the import map's `integrity` and the lockfile's `files`.
+`specifiers` may be empty when `html` is given.
 
 `dependencies` (default `false`) is `true` or `"prod"` and `dependencyDepth` (default `5`) a
 non-negative integer; see [Including dependencies](#including-dependencies-dependencies). Any other
@@ -543,6 +548,66 @@ origins, non-HTTP schemes).
 A module that a provider maps to an origin-relative URL (`local()`: `/node_modules/…`) has nothing to be fetched
 from at build time: it is left out of the walk, listed in `skipped` (`{ url, from: <its specifier>, reason }`) and gets no
 `integrity`, so one `build({ graph: true })` can mix local and CDN packages. (It used to throw `TypeError: Invalid URL`.)
+
+#### HTML module graphs: an integrity manifest for html-modules
+
+[`@johnhenry/html-modules`](https://github.com/johnhenry/html-modules) pages load `.html` files that reference each
+other: `<html-import src>` and `<html-export src>`. Its `createHTMLModules({ integrity, strict })` takes an **integrity
+manifest**, `{ [url]: "sha384-…" }`, which is the shape of an import map's `integrity` object, so one manifest can drive
+both. mport builds it, the same way `graph` hashes JavaScript:
+
+```js
+import { htmlGraph, integrityManifest } from "@johnhenry/mport";
+
+// 1. standalone: fetch, hash and follow the graph
+const { integrity, files, truncated, bare, skipped } = await htmlGraph("https://cdn.example/ui/kit.html");
+
+// 2. or as part of a build (map `integrity` + lockfile `files`; tampering is refused on the next build)
+const { importMap, lock, html } = await router.build(["react@^19"], { graph: true, html: ["https://cdn.example/ui/kit.html"] });
+const manifest = integrityManifest({ importMap });   // URL → hash, sorted
+```
+
+```sh
+mport build --html https://cdn.example/ui/kit.html --manifest integrity.json   # no specifiers needed
+```
+
+```js
+// in the page: html-modules checks every HTML fetch, at any depth; strict refuses anything unpinned
+import { createHTMLModules } from "@johnhenry/html-modules";
+const modules = createHTMLModules({ integrity: await (await fetch("/integrity.json")).json(), strict: true });
+```
+
+What is walked, per root URL (an absolute `http(s)` URL; `htmlGraph(roots)` takes one or an array):
+
+1. The file is fetched with the router's `fetch` (`htmlGraph`: `options.fetch`, default `globalThis.fetch`) and hashed
+   (`algorithm`, default `sha384`).
+2. An HTML module is read with html-modules' own `scanHTMLModule` (so mport agrees with the loader about what an import is:
+   nothing inside comments or `<template>` counts, and an `<html-import-settings base>` moves the module's imports and
+   re-exports, as the loader does). A module that cannot be read (`SyntaxError`) fails the build with an
+   `IntegrityError` naming it.
+3. Every `<html-import src>`, **lazy ones too**, and `<html-export src>` is followed when it is a URL-like specifier
+   (`./`, `../`, `/` or a scheme) on the root's origin or one of `origins`. A `.js` file (or `type="js"`) is followed as
+   JavaScript, its static imports included (`dynamic` applies); `type="html"` or a `.html`/`.htm` name is HTML. Bare
+   specifiers go to `bare` (html-modules resolves them through your import map), other origins and non-HTTP schemes to
+   `skipped`.
+4. `maxFiles`, `maxDepth`, `concurrency`, `origins`, `dynamic`, `signal` and the lockfile rules (a recorded hash is an
+   expectation: a changed file rejects with `IntegrityError`, `relock` accepts it) are those of
+   [`graph`](#whole-graph-integrity-graph). `maxFiles` counts the HTML walk apart from the `graph` walk.
+
+The result of `htmlGraph()` is `{ integrity, files, truncated, bare, skipped }`; `integrity` is the manifest, sorted by
+URL. `integrityManifest(source)` extracts the same object from a build result (`{ importMap }`), an import map or a
+lockfile. In a build, `html` files are sorted into the map so a committed `importmap.json` is stable.
+
+`scan` (a function `(source, url) => record`) replaces the reader. By default it is `scanHTMLModule` from
+**`@johnhenry/html-modules`, an optional peer** imported on demand (`import("@johnhenry/html-modules")`, resolved from
+mport's own location); without it installed, using `html` is an `Error` that says to install it or pass `scan`.
+Everything else in mport is unaffected.
+
+**Limits.** All of those of `graph` (build-time download of everything; the bytes the build machine received; same
+origin by default), plus: a module reached only through a *computed* `import()`, a `fetch()`ed HTML file or a dynamic
+`load()` call is not in the graph; an `<html-import>` whose `src` is a bare specifier is not followed. Pass every page
+root you ship, since each entry point's graph is separate. The manifest proves the files you hashed are the files
+the browser gets; it does not say they are safe.
 
 **Limits:**
 
@@ -1152,6 +1217,19 @@ const { importMap } = await router.build(["react@^19"]);
 res.send(`<head>${renderImportMap(importMap)}${renderModulePreload(importMap)}</head>`);
 ```
 
+### htmlGraph(), integrityManifest()
+
+```ts
+htmlGraph(roots: string | string[], options?: { fetch?, scan?, signal?, maxFiles?, maxDepth?, dynamic?, origins?, algorithm?, concurrency? }):
+  Promise<{ integrity: Record<string, string>, files: number, truncated, bare: string[], skipped }>
+integrityManifest(source: { importMap } | ImportMap | Lockfile): Record<string, string>
+```
+
+Hash an html-modules graph and extract the manifest; see [HTML module graphs](#html-module-graphs-an-integrity-manifest-for-html-modules).
+`htmlGraph` rejects with `TypeError` for no roots, a relative or non-http(s) root or a `scan` that is not a function, and
+with `IntegrityError` when a file cannot be fetched (non-OK or network error) or an HTML module cannot be read. Both are
+exported from `@johnhenry/mport` and `@johnhenry/mport/core` (and `/firefox`).
+
 ### parseImports()
 
 ```ts
@@ -1482,6 +1560,7 @@ against Rollup 4 and Vite 8 (Rolldown-based); other majors are untested.
 ```
 mport build   [specifier...] [--config file] [--out importmap.json] [--lock mport.lock.json] [--relock] [--conflicts error|scope]
               [--graph [--max-files N] [--max-depth N]] [--dependencies [--dependency-depth N]]
+              [--html url...] [--manifest integrity.json]
 mport resolve <specifier> [--config file] [--trace] [--lock mport.lock.json] [--relock]
 mport outdated [name...] [--config file] [--lock mport.lock.json] [--json]
 mport update   [name...] [--config file] [--lock mport.lock.json] [--json]
@@ -1502,6 +1581,8 @@ global `fetch` (Node 18+; the package declares Node >= 26).
 | `--max-files`, `--max-depth` | | 500, 20 | the graph bounds; imply `--graph` |
 | `--dependencies` | | `false` (or config's `dependencies`) | `build`: also add each raw-CDN package's manifest `dependencies` (see [Including dependencies](#including-dependencies-dependencies)); prints each addition and a warning per skipped or too-deep dependency |
 | `--dependency-depth` | | 5 | how many levels of dependencies to follow; implies `--dependencies` |
+| `--html` | | config's `html` | `build`: an HTML module URL to hash with its whole graph (repeatable; see [HTML module graphs](#html-module-graphs-an-integrity-manifest-for-html-modules)). With `--html`, no specifiers are needed |
+| `--manifest` | | none | `build`: also write the integrity manifest (URL → hash, the import map's `integrity`) to this file |
 | `--json` | | `false` | `outdated` and `update` print JSON |
 | `--trace` | | `false` | `resolve` prints the trace too |
 | `--help` | `-h` | | print usage |
@@ -1517,6 +1598,7 @@ global `fetch` (Node 18+; the package declares Node >= 26).
 | `specifiers` | `[]` | what `build` resolves when none are given on the command line |
 | `scopes` | none | passed to `build` |
 | `graph` | off | `true` or `GraphOptions`, passed to `build` |
+| `html` | off | HTML module URLs, or `{ roots, … }`, passed to `build` (`--html` overrides it) |
 | `conflicts` | `"error"` | passed to `build` (the `--conflicts` flag overrides it) |
 | `dependencies`, `dependencyDepth` | off, `5` | passed to `build` (the flags override them) |
 

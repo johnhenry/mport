@@ -8,7 +8,7 @@ export {
   HealthRegistry, RoutingError, SkipError, IntegrityError,
   createRegistry, pickVersion, outdated, entryOf, entryInfo, resolveExports, ResolutionError,
   compileImportMap, mergeImportMaps, renderImportMap, importMapText, importMapHash, cspHash, renderImportMapCsp, modulePreloads, renderModulePreload,
-  createLock, lockKey, parseImports,
+  createLock, lockKey, parseImports, htmlGraph, integrityManifest,
   injectImportMap, injectModulePreload, startup, createImporter,
   semver,
   DEFAULT_CACHE_KEY,
@@ -18,5 +18,5 @@ export type {
   MPortOptions, SpecifierObject, CspHashAlgorithm, DependencyReport, MPortOrigin, Registry, ParsedSpecifier, Artifact, TraceEvent, Resolution,
   Node, Provider, ProviderDefinition, Match, Route, Routes, LockEntry, Lockfile, Lock, ImportMap, Probe,
   CircuitBreakerOptions, RegistryClient, RouterOptions, ResolveOptions, BuildOptions, BuildResult, Router,
-  CacheStore, HealthState, ConflictReport, GraphOptions, GraphReport, RegistryInfo, OutdatedRow,
+  CacheStore, HealthState, ConflictReport, GraphOptions, GraphReport, HtmlGraphOptions, RegistryInfo, OutdatedRow,
 } from "./types.js";

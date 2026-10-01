@@ -8,7 +8,7 @@ import mport, {
   HealthRegistry, RoutingError, SkipError, IntegrityError, ResolutionError,
   parseSpecifier, keyOf, isRoutable, createRegistry, entryInfo, entryOf, resolveExports,
   compileImportMap, mergeImportMaps, renderImportMapCsp, importMapHash, cspHash, importMapText, createLock, lockKey, injectImportMap, startup, createImporter, semver,
-  type Resolution, type TraceEvent, type Lockfile, type ImportMap, type HealthState, type Router, type ConflictReport, type GraphReport, parseImports, outdated, pickVersion, type OutdatedRow,
+  type Resolution, type TraceEvent, type Lockfile, type ImportMap, type HealthState, type Router, type ConflictReport, type GraphReport, parseImports, htmlGraph, integrityManifest, type HtmlGraphOptions, outdated, pickVersion, type OutdatedRow,
 } from "@johnhenry/mport";
 import * as core from "@johnhenry/mport/core";
 import mportRollup, { mportRollup as namedRollup, type RollupPluginOptions } from "@johnhenry/mport/rollup";
@@ -65,6 +65,13 @@ export async function check(): Promise<void> {
   const gr: GraphReport | undefined = walked.graph;
   void [gr?.files, gr?.truncated[0]?.reason, gr?.bare, walked.lock.files?.["https://x.test/a.js"]];
   void parseImports("import 'a'", { dynamic: true });
+  const htmlWalk = await router.build([], { html: ["https://x.test/ui.html"] });
+  const htmlOptions: HtmlGraphOptions = { roots: ["https://x.test/ui.html"], maxFiles: 10, origins: [] };
+  const withHtml = await router.build(["react@19"], { html: htmlOptions });
+  void [htmlWalk.html?.files, withHtml.html?.skipped[0]?.reason];
+  const hg = await htmlGraph(["https://x.test/ui.html"], { fetch: globalThis.fetch, maxDepth: 3 });
+  const manifest: Record<string, string> = hg.integrity;
+  void [manifest, hg.files, hg.truncated, integrityManifest(walked), integrityManifest(walked.importMap), integrityManifest(walked.lock)];
   void compileImportMap([{ key: "a", url: "u" }], {}, { integrity: { u: "sha384-x" } });
   const behind = await outdated(importLock, { registry: router.registry, names: ["react"] });
   const row: OutdatedRow | undefined = behind.outdated[0];

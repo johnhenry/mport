@@ -317,6 +317,14 @@ export interface BuildOptions {
    */
   graph?: boolean | GraphOptions;
   /**
+   * HTML module URLs (html-modules) to hash together with their whole graph: `<html-import src>` and
+   * `<html-export src>` are followed (same origin, plus `origins`), and so is the JavaScript they import.
+   * Every file's hash goes into the import map's `integrity` and the lockfile's `files`; `integrityManifest()`
+   * extracts it for `createHTMLModules({ integrity })`. Reading HTML needs the optional peer `@johnhenry/html-modules`
+   * unless `scan` is given. An array is `{ roots }`.
+   */
+  html?: string[] | HtmlGraphOptions;
+  /**
    * Also add the manifest `dependencies` of each resolved package as routed entries, for packages
    * served by a raw-file provider (jsDelivr, unpkg, `local()`), whose own bare imports are otherwise
    * missing from the map. `true` and `"prod"` mean the same: `dependencies` only, not dev, peer or
@@ -354,6 +362,14 @@ export interface GraphOptions {
   concurrency?: number;
 }
 
+/** Options of `build({ html })` and `htmlGraph()`: the graph's, plus the roots and the HTML reader. */
+export interface HtmlGraphOptions extends GraphOptions {
+  /** absolute http(s) URLs of HTML modules (`build({ html })` only; `htmlGraph` takes them as its first argument) */
+  roots?: string[];
+  /** reads an HTML module's source into a record with `imports`, `exports` and `importSettings`: html-modules' `scanHTMLModule` (default: imported from `@johnhenry/html-modules`) */
+  scan?: (source: string, url?: string) => { imports: Array<{ src: string; type?: string }>; exports: Array<{ kind: string; src?: string; type?: string }>; importSettings?: { base?: string } };
+}
+
 /** What a `graph` build did (BuildResult.graph). */
 export interface GraphReport {
   /** files fetched and hashed */
@@ -387,6 +403,8 @@ export interface BuildResult {
   dependencies?: DependencyReport;
   /** present when `graph` was requested */
   graph?: GraphReport;
+  /** present when `html` was requested */
+  html?: GraphReport;
 }
 
 export interface Router {
@@ -539,6 +557,17 @@ export function compileImportMap(
 ): ImportMap;
 /** The module specifiers a JavaScript source imports statically (and `import("literal")` with `dynamic`). */
 export function parseImports(source: string, o?: { dynamic?: boolean }): string[];
+/**
+ * Hash an html-modules graph: fetch each root, follow its `<html-import src>` and `<html-export src>` (and the
+ * JavaScript they import), and return the integrity manifest (URL → SRI hash, sorted: the shape of an import map's
+ * `integrity`) plus what was cut short or left alone. `fetch` defaults to `globalThis.fetch`.
+ */
+export function htmlGraph(
+  roots: string | string[],
+  o?: Omit<HtmlGraphOptions, "roots"> & { fetch?: typeof fetch; signal?: AbortSignal },
+): Promise<GraphReport & { integrity: Record<string, string> }>;
+/** The URL → SRI hash object of a build result, an import map or a lockfile (sorted by URL): html-modules' `createHTMLModules({ integrity })`. */
+export function integrityManifest(source: { importMap: ImportMap } | ImportMap | Lockfile): Record<string, string>;
 export function mergeImportMaps(...maps: ImportMap[]): ImportMap;
 /** `<script type="importmap">…</script>` as an HTML string for server rendering (JSON escaped so nothing ends the script early). */
 export function renderImportMap(map: ImportMap, o?: { nonce?: string }): string;

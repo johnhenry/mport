@@ -103,11 +103,13 @@
     "example:18": "node examples/18-csp-hash-for-a-static-sites-import-map.mjs",
     "example:19": "node examples/19-dependencies-of-a-raw-cdn-package-join-the-map.mjs",
     "example:20": "node examples/20-app-owned-prefix-needs-no-registry.mjs",
+    "example:21": "node examples/21-integrity-manifest-for-an-html-modules-graph.mjs",
     "demo": "deno -A examples/demo.mjs",
     "demo:firefox": "deno -A examples/demo.firefox.mjs",
     "demo:html": "python3 -m http.server 8712"
   },
   "devDependencies": {
+    "@johnhenry/html-modules": "git+https://github.com/johnhenry/html-modules.git#4558a7a735d34fa5ce9f5540fcdfccb6a2125056",
     "@playwright/test": "^1.63.0",
     "@types/node": "^24.19.0",
     "htm": "^3.1.1",
@@ -115,5 +117,13 @@
     "rollup": "^4.63.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.1"
+  },
+  "peerDependencies": {
+    "@johnhenry/html-modules": "*"
+  },
+  "peerDependenciesMeta": {
+    "@johnhenry/html-modules": {
+      "optional": true
+    }
   }
 }

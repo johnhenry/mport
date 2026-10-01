@@ -321,6 +321,17 @@ const { importMap, lock, graph } = await router.build(["react@^19"], { graph: { 
 
 `mport build --graph [--max-files N] [--max-depth N]` does the same from the CLI. It is a build-time download of everything, a tokenizer-level parser and same-origin only; see [the limits](docs/api.md#whole-graph-integrity-graph).
 
+### Integrity for html-modules graphs: `html`
+
+[html-modules](https://github.com/johnhenry/html-modules) pages load `.html` files that import and re-export each other. `build({ html: [url] })` (or `htmlGraph(url)`, or `mport build --html <url>`) walks `<html-import src>` and `<html-export src>` (and the JavaScript they import), hashes every file, and writes the hashes where `graph` writes its own: the import map's `integrity` and the lockfile's `files`. The **integrity manifest** is that URL → `sha384-…` object, the shape of an import map's `integrity`, so one manifest pins both: html-modules takes it as `createHTMLModules({ integrity, strict: true })` and a tampered file anywhere in the graph is refused.
+
+```js
+const { importMap } = await router.build([], { html: ["https://cdn.example/ui/kit.html"] });
+const integrity = integrityManifest({ importMap });   // → createHTMLModules({ integrity, strict: true })
+```
+
+It reads HTML with html-modules' own scanner, an **optional peer** imported on demand (or pass `scan`). Details and limits: [docs/api.md](docs/api.md#html-module-graphs-an-integrity-manifest-for-html-modules).
+
 ### Packages that import their own dependencies: `dependencies`
 
 A raw file CDN (jsDelivr, unpkg) or `local()` serves a package's files as published, so a package that does `import("dompurify")` keeps that bare specifier, and the browser resolves it through **your** import map, which holds only what you listed. `build(specifiers, { dependencies: true })` reads each resolved package's manifest and routes its `dependencies` as entries of their own:
@@ -363,7 +374,7 @@ export default {
 };
 ```
 
-Flags: `--config`, `--out importmap.json`, `--lock mport.lock.json`, `--relock`, `--conflicts error|scope`, `--graph` (`--max-files`, `--max-depth`), `--trace`, `--json`. A function config receives the parsed lockfile (`undefined` with `--relock` or when there is none): `export default ({ lock }) => createRouter(routes, { lock })`. A prebuilt router can't take a lockfile, so `--lock`/`--relock` with one is an error and `build` leaves the lock file alone. Details: [docs/api.md#the-cli](docs/api.md#the-cli).
+Flags: `--config`, `--out importmap.json`, `--lock mport.lock.json`, `--relock`, `--conflicts error|scope`, `--graph` (`--max-files`, `--max-depth`), `--html <url>` and `--manifest <file>` (an html-modules graph and its integrity manifest), `--trace`, `--json`. A function config receives the parsed lockfile (`undefined` with `--relock` or when there is none): `export default ({ lock }) => createRouter(routes, { lock })`. A prebuilt router can't take a lockfile, so `--lock`/`--relock` with one is an error and `build` leaves the lock file alone. Details: [docs/api.md#the-cli](docs/api.md#the-cli).
 
 ### Keeping a lockfile current: `mport outdated` and `mport update`
 
@@ -475,7 +486,7 @@ Every export, from `@johnhenry/mport` (all of them), `@johnhenry/mport/firefox` 
 | [`createRouter`](docs/api.md#createrouter) | `(routes, options?) → Router` | Build a router. Options: `probe`, `lock`, `resolveVersions`, `circuitBreaker`, `health`, `target`, `capabilities`, `fetch`, `importer`, `registries`, `registry`, `onEvent`, `now`, `allowCommonJS`, `name` |
 | [`router.resolve`](docs/api.md#routerresolve) | `(specifier, options?) → Promise<Resolution \| null>` | Resolve one specifier. Options: `signal`, `exclude`, `build`, `integrity`, `target`, `capabilities`, `relock`, `onEvent` |
 | [`router.import`](docs/api.md#routerimport) | `(specifier, options?) → Promise<module>` | Resolve and import, failing over when the import fails |
-| [`router.build`](docs/api.md#routerbuild) | `(specifiers, { scopes?, conflicts?, graph?, dependencies?, dependencyDepth?, signal? }?) → Promise<{ importMap, lock, conflicts, dependencies?, graph? }>` | Resolve many and compile an import map and lockfile; `conflicts: "scope"` scopes conflicting versions per dependent; `graph` hashes every file of each module's import graph; `dependencies` adds raw-CDN packages' manifest dependencies |
+| [`router.build`](docs/api.md#routerbuild) | `(specifiers, { scopes?, conflicts?, graph?, html?, dependencies?, dependencyDepth?, signal? }?) → Promise<{ importMap, lock, conflicts, dependencies?, graph?, html? }>` | Resolve many and compile an import map and lockfile; `conflicts: "scope"` scopes conflicting versions per dependent; `graph` hashes every file of each module's import graph; `html` hashes html-modules graphs into an integrity manifest; `dependencies` adds raw-CDN packages' manifest dependencies |
 | `router.health`, `router.lock`, `router.name` | | The router's [`HealthRegistry`](docs/api.md#healthregistry), its in-memory lock, its name |
 | [`route`](docs/api.md#route) | `(match, use) → { match, use }` | One array-form route |
 | [`esmSh`, `jsDelivr`, `unpkg`, `jspm`, `jsr`, `github`, `local`](docs/api.md#built-in-providers) | `(options?) → Provider` | Built-in providers |
@@ -549,7 +560,7 @@ The default race still mixes builds (raw jsDelivr/unpkg files against jspm's tra
 
 ## Examples
 
-[`examples/README.md`](examples/README.md) indexes them all. Twenty numbered Node examples prove one behaviour each, offline, against a fake network (`npm run examples`, or `npm run example:05` for one): range resolution, fallback, race, CommonJS skipping, lockfile pinning, the circuit breaker, `verified()`, `router.import()` failover, `build()`, the CLI, the 1.x race, server-rendered import maps, conflicting versions scoped per dependent, whole-graph integrity, `outdated`/`update`, the Rollup plugin, `local()` serving a package that is not on npm, the CSP hash of an import map, a raw-CDN package's dependencies joining the map, and an app-owned prefix with no registry lookup.
+[`examples/README.md`](examples/README.md) indexes them all. Twenty-one numbered Node examples prove one behaviour each, offline, against a fake network (`npm run examples`, or `npm run example:05` for one): range resolution, fallback, race, CommonJS skipping, lockfile pinning, the circuit breaker, `verified()`, `router.import()` failover, `build()`, the CLI, the 1.x race, server-rendered import maps, conflicting versions scoped per dependent, whole-graph integrity, `outdated`/`update`, the Rollup plugin, `local()` serving a package that is not on npm, the CSP hash of an import map, a raw-CDN package's dependencies joining the map, an app-owned prefix with no registry lookup, and an integrity manifest for an html-modules graph.
 
 Three browser pages share one header, one timeline and one way of explaining results:
 
@@ -593,7 +604,8 @@ The pages talk to the real CDNs and registries; outages, latency and tampering a
 
 mport is one of the `@johnhenry` family's browser-side libraries. None depends on another.
 
-- **[`@johnhenry/html-modules`](https://github.com/johnhenry/html-modules)** -- declarative HTML modules: `<html-import src="./ui.html" as="ui">` turns an HTML file's `<html-export>`s into custom elements. A separate concern that composes with mport through the import map: html-modules resolves a bare `src` with `import.meta.resolve`, which applies the page's own `<script type="importmap">`, and does no package or CDN routing of its own (it was split out of the project whose routing half became this router). mport's `router.build()` and `startup()` produce that import map, so a prefix mapping such as `"ui-kit/"` from `router.build(["ui-kit@1/"])` makes `<html-import src="ui-kit/card.html">` load from whichever CDN mport chose. Route such a package to a raw-file provider (`jsDelivr()`, `unpkg()`), since the HTML must be served as published.
+- **[`@johnhenry/html-modules`](https://github.com/johnhenry/html-modules)** -- declarative HTML modules: `<html-import src="./ui.html" as="ui">` turns an HTML file's `<html-export>`s into custom elements. A separate concern that composes with mport through the import map: html-modules resolves a bare `src` with `import.meta.resolve`, which applies the page's own `<script type="importmap">`, and does no package or CDN routing of its own (it was split out of the project whose routing half became this router). mport's `router.build()` and `startup()` produce that import map, so a prefix mapping such as `"ui-kit/"` from `router.build(["ui-kit@1/"])` makes `<html-import src="ui-kit/card.html">` load from whichever CDN mport chose. Route such a package to a raw-file provider (`jsDelivr()`, `unpkg()`), since the HTML must be served as published. `build({ html: [url] })` hashes an html-modules graph into an integrity manifest that `createHTMLModules({ integrity, strict })` consumes (html-modules is then an optional peer, imported on demand).
+- **[`@johnhenry/workbench`](https://github.com/johnhenry/workbench)** -- the integration app that runs the family together ([live](https://johnhenry.github.io/workbench/), [docs](https://opensource.johnhenry.me/workbench/)).
 - **[`@johnhenry/window-algebra`](https://github.com/johnhenry/window-algebra)** -- a functional window manager for the browser (pure state updates, a layout algebra, CSS as the layout solver). No dependency in either direction; they meet at the import map. A no-build page using window-algebra needs an import-map entry for each of its entry points (and for anything loaded alongside, such as React for its `/react` binding), and mport can generate that map with fallback across mirrors instead of hand-written CDN URLs.
 - **[`@johnhenry/safe-fragment`](https://github.com/johnhenry/safe-fragment)** -- Web Components that render untrusted HTML through versioned security profiles. Its DOMPurify fallback is loaded with a dynamic `import("dompurify")`, so a no-bundler page needs a `dompurify` entry in the import map. On raw-file providers (`jsDelivr()`, `unpkg()`, `local()`) `build(["@johnhenry/safe-fragment@0"], { dependencies: true })` (CLI: `--dependencies`) adds it from the package's own `dependencies`; listing `dompurify@<pinned version>` explicitly works too. esm.sh rewrites the import itself, so nothing extra is needed there. No dependency in either direction.
 
