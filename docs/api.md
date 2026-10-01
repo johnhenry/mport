@@ -799,8 +799,8 @@ compileImportMap(resolved: Resolution[], scoped?: Record<string, Resolution[]>):
 
 `{ imports, scopes?, integrity? }`. Each Resolution maps `key → url`; a prefix key
 (ending `/`) maps to `base` (or the URL without its file name). `integrity` maps URL →
-hash for every Resolution with an `integrity` (prefix entries excluded at the top
-level). `scopes` and `integrity` are omitted when empty. Two Resolutions that map one key
+hash for every Resolution with an `integrity` (prefix keys are excluded, at the top
+level and in scopes alike: the hash is of one entry file, not of the directory a prefix maps). `scopes` and `integrity` are omitted when empty. Two Resolutions that map one key
 to **different** URLs (`react@18` and `react@19` both want `"react"`) throw a
 `ResolutionError` naming the key and both URLs, in `imports` and inside each scope alike,
 instead of keeping one silently; the same URL twice is fine. Give the second version its

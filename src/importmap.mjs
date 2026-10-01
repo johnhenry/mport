@@ -30,7 +30,7 @@ export function compileImportMap(resolved, scoped = {}) {
     scopes[scope] = {};
     for (const r of list) {
       put(scopes[scope], r, `scope ${scope}`);
-      if (r.integrity) integrity[r.url] = r.integrity;
+      if (r.integrity && !r.key.endsWith("/")) integrity[r.url] = r.integrity;
     }
   }
   if (Object.keys(scopes).length) map.scopes = scopes;

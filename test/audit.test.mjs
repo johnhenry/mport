@@ -235,3 +235,12 @@ test("14c. verified() with the default head probe downloads once per candidate (
   assert.equal(second.cached, true);
   assert.deepEqual(gets.map((l) => l.method), ["GET"], "hashed again, once");
 });
+
+test("15. integrity is skipped for prefix keys at the top level and in scopes alike", () => {
+  const entry = (key, url) => ({ key, url, integrity: `sha384-${key}` });
+  const map = compileImportMap(
+    [entry("a", "https://x/a.js"), { ...entry("lit/", "https://x/lit.js"), base: "https://x/lit/" }],
+    { "/s/": [entry("b", "https://x/b.js"), { ...entry("lit/", "https://x/lit2.js"), base: "https://x/lit2/" }] },
+  );
+  assert.deepEqual(map.integrity, { "https://x/a.js": "sha384-a", "https://x/b.js": "sha384-b" });
+});
