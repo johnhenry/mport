@@ -28,6 +28,8 @@ export interface PluginApi {
   specifiers(): string[];
   /** `router.build()` over `specifiers()` */
   importMap(): Promise<BuildResult>;
+  /** the CSP hash source (`'sha256-…'`) of the inline `<script type="importmap">` the Vite plugin injects, for `script-src` on a static site */
+  importMapHash(options?: { algorithm?: "sha256" | "sha384" | "sha512" }): Promise<string>;
 }
 
 export type { Router };

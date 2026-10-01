@@ -100,6 +100,7 @@
     "example:15": "node examples/15-outdated-and-update-keep-the-lockfile-current.mjs",
     "example:16": "node examples/16-rollup-plugin-routes-bare-imports.mjs",
     "example:17": "node examples/17-local-serves-a-package-that-is-not-on-npm.mjs",
+    "example:18": "node examples/18-csp-hash-for-a-static-sites-import-map.mjs",
     "demo": "deno -A examples/demo.mjs",
     "demo:firefox": "deno -A examples/demo.firefox.mjs",
     "demo:html": "python3 -m http.server 8712"

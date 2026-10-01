@@ -7,7 +7,7 @@ import mport, {
   fallback, race, adaptive, weighted, prefer, verified, cache, sri,
   HealthRegistry, RoutingError, SkipError, IntegrityError, ResolutionError,
   parseSpecifier, keyOf, isRoutable, createRegistry, entryInfo, entryOf, resolveExports,
-  compileImportMap, mergeImportMaps, createLock, lockKey, injectImportMap, startup, createImporter, semver,
+  compileImportMap, mergeImportMaps, renderImportMapCsp, importMapHash, cspHash, importMapText, createLock, lockKey, injectImportMap, startup, createImporter, semver,
   type Resolution, type TraceEvent, type Lockfile, type ImportMap, type HealthState, type Router, type ConflictReport, type GraphReport, parseImports, outdated, pickVersion, type OutdatedRow,
 } from "@johnhenry/mport";
 import * as core from "@johnhenry/mport/core";
@@ -120,6 +120,14 @@ export async function check(): Promise<void> {
   void [asVite, asRollup];
   // @ts-expect-error mode is "external" or "importmap"
   mportVite(router, { mode: "inline" });
+
+  // CSP hashes for the inline import map
+  const csp = await renderImportMapCsp({ imports: {} }, { algorithm: "sha384", nonce: "n" });
+  const hash: string = await importMapHash({ imports: {} });
+  void [csp.html, csp.hash, csp.text, hash, await cspHash(importMapText({ imports: {} }), "sha512")];
+  // @ts-expect-error not a CSP hash algorithm
+  await cspHash("x", "md5");
+  void (await mportVite(router).api.importMapHash({ algorithm: "sha256" }));
 
   // installedRegistry is a RegistryClient
   const installed = installedRegistry({ root: "node_modules", fallback: createRegistry() });

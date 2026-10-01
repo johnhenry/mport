@@ -11,13 +11,18 @@
 //                    and retries the next CDN when an import fails (staying on
 //                    one build only if a lockfile or `build` option pins it).
 
-import { modulePreloads } from "./importmap.mjs";
+import { modulePreloads, importMapText } from "./importmap.mjs";
 
-export function injectImportMap(importMap, { document = globalThis.document } = {}) {
+/**
+ * Insert the import map as an inline script. Under a Content-Security-Policy that script needs
+ * a `nonce` (passed here) or its hash in `script-src`: importMapHash() hashes exactly this text.
+ */
+export function injectImportMap(importMap, { document = globalThis.document, nonce } = {}) {
   if (!document) throw new Error("mport: injectImportMap needs a document");
   const el = document.createElement("script");
   el.type = "importmap";
-  el.textContent = JSON.stringify(importMap);
+  if (nonce) el.nonce = nonce;
+  el.textContent = importMapText(importMap);
   const first = document.querySelector('script[type="module"], script[type="importmap"]');
   (first?.parentNode ?? document.head).insertBefore(el, first ?? null);
   return el;

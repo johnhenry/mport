@@ -60,16 +60,55 @@ export function mergeImportMaps(...maps) {
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /**
- * `<script type="importmap">` for an import map, as an HTML string. The JSON is escaped
- * (`<`, U+2028, U+2029) so that no URL or key can end the script element early.
- * Place it before the first module script. `nonce` adds a CSP nonce attribute.
+ * The exact text of an import map's `<script>`: what renderImportMap() puts between the tags,
+ * what injectImportMap() sets as `textContent` and what the Vite plugin injects. The JSON is
+ * escaped (`<`, U+2028, U+2029) so that no URL or key can end the script element early. A CSP
+ * hash is a hash of precisely this string, so everything that emits an import map uses it.
  */
-export function renderImportMap(importMap, { nonce } = {}) {
-  const json = JSON.stringify(importMap)
+export const importMapText = (importMap) =>
+  JSON.stringify(importMap)
     .replace(/</g, "\\u003c")
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029");
-  return `<script type="importmap"${nonce ? ` nonce="${esc(nonce)}"` : ""}>${json}</script>`;
+
+/**
+ * `<script type="importmap">` for an import map, as an HTML string, text as in importMapText().
+ * Place it before the first module script. `nonce` adds a CSP nonce attribute; a static site
+ * that cannot have one allows the script by hash instead: see importMapHash().
+ */
+export function renderImportMap(importMap, { nonce } = {}) {
+  return `<script type="importmap"${nonce ? ` nonce="${esc(nonce)}"` : ""}>${importMapText(importMap)}</script>`;
+}
+
+const ALGORITHMS = { sha256: "SHA-256", sha384: "SHA-384", sha512: "SHA-512" };
+
+/**
+ * The Content-Security-Policy source expression for an inline script's text, quotes included
+ * (`'sha256-…'`), ready to put in `script-src`. Hashes the UTF-8 bytes of `text`, which must be
+ * exactly the text between the tags (CSP does not trim or normalise it). Uses Web Crypto, so it
+ * is async and needs `crypto.subtle` (Node, Deno, and browsers in a secure context).
+ * @param {string} text
+ * @param {"sha256"|"sha384"|"sha512"} [algorithm="sha256"]
+ */
+export async function cspHash(text, algorithm = "sha256") {
+  const name = ALGORITHMS[algorithm];
+  if (!name) throw new TypeError(`mport: CSP hash algorithm must be sha256, sha384 or sha512, got ${JSON.stringify(algorithm)}`);
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest(name, new TextEncoder().encode(String(text))));
+  let bin = "";
+  for (const b of digest) bin += String.fromCharCode(b);
+  return `'${algorithm}-${btoa(bin)}'`;
+}
+
+/** The CSP hash source (`'sha256-…'`) of the inline `<script type="importmap">` that renderImportMap() emits for `importMap`. */
+export const importMapHash = (importMap, { algorithm = "sha256" } = {}) => cspHash(importMapText(importMap), algorithm);
+
+/**
+ * renderImportMap() plus the CSP hash of what it rendered, for a static site (no per-response
+ * nonce): `{ html, hash, text }`. Add `hash` to the page's `script-src`.
+ */
+export async function renderImportMapCsp(importMap, { algorithm = "sha256", nonce } = {}) {
+  const text = importMapText(importMap);
+  return { html: renderImportMap(importMap, { nonce }), hash: await cspHash(text, algorithm), text };
 }
 
 /**

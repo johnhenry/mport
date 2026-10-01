@@ -519,6 +519,15 @@ export function parseImports(source: string, o?: { dynamic?: boolean }): string[
 export function mergeImportMaps(...maps: ImportMap[]): ImportMap;
 /** `<script type="importmap">…</script>` as an HTML string for server rendering (JSON escaped so nothing ends the script early). */
 export function renderImportMap(map: ImportMap, o?: { nonce?: string }): string;
+/** The exact text between the tags of the import-map script: what `renderImportMap`, `injectImportMap` and the Vite plugin emit, and what a CSP hash covers. */
+export function importMapText(map: ImportMap): string;
+export type CspHashAlgorithm = "sha256" | "sha384" | "sha512";
+/** The CSP source expression for an inline script's text, quotes included: `'sha256-…'`. Async (Web Crypto). */
+export function cspHash(text: string, algorithm?: CspHashAlgorithm): Promise<string>;
+/** The CSP hash source of the inline import map `renderImportMap(map)` emits, for `script-src` on a static site (no nonce). */
+export function importMapHash(map: ImportMap, o?: { algorithm?: CspHashAlgorithm }): Promise<string>;
+/** `renderImportMap()` plus the hash of what it rendered: `{ html, hash, text }`. */
+export function renderImportMapCsp(map: ImportMap, o?: { algorithm?: CspHashAlgorithm; nonce?: string }): Promise<{ html: string; hash: string; text: string }>;
 /** Every distinct non-prefix module URL in the map, with its `integrity` when the map has one. */
 export function modulePreloads(map: ImportMap): Array<{ href: string; integrity?: string }>;
 /** `<link rel="modulepreload">` tags, one per line, as an HTML string. */
@@ -528,7 +537,8 @@ export function createLock(data?: Partial<Lockfile>): Lock;
 /** Lockfile key: the specifier as written, normalized (explicit prefix kept, "gh:" → "github:", no trailing "/"). */
 export function lockKey(parsed: ParsedSpecifier): string;
 
-export function injectImportMap(map: ImportMap, o?: { document?: Document }): HTMLScriptElement;
+/** Insert the import map as an inline script (its text is `importMapText(map)`); `nonce` for a nonce-based CSP. */
+export function injectImportMap(map: ImportMap, o?: { document?: Document; nonce?: string }): HTMLScriptElement;
 /** Add `<link rel="modulepreload">` elements for the map's modules to `<head>`; returns them. */
 export function injectModulePreload(map: ImportMap, o?: { document?: Document; crossorigin?: string }): HTMLLinkElement[];
 export function startup(router: Router, specifiers: string[], o?: BuildOptions & { document?: Document }): Promise<BuildResult>;

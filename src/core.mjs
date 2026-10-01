@@ -11,7 +11,7 @@ export {
 } from "./strategies.mjs";
 export { createRegistry, entryOf, entryInfo, resolveExports, pickVersion, ResolutionError } from "./registry.mjs";
 export { outdated } from "./outdated.mjs";
-export { compileImportMap, mergeImportMaps, renderImportMap, modulePreloads, renderModulePreload } from "./importmap.mjs";
+export { compileImportMap, mergeImportMaps, renderImportMap, importMapText, importMapHash, cspHash, renderImportMapCsp, modulePreloads, renderModulePreload } from "./importmap.mjs";
 
 export { createLock, lockKey } from "./lock.mjs";
 export { parseImports } from "./graph.mjs";

@@ -7,7 +7,7 @@ export {
   fallback, race, adaptive, weighted, prefer, verified, cache, sri,
   HealthRegistry, RoutingError, SkipError, IntegrityError,
   createRegistry, pickVersion, outdated, entryOf, entryInfo, resolveExports, ResolutionError,
-  compileImportMap, mergeImportMaps, renderImportMap, modulePreloads, renderModulePreload,
+  compileImportMap, mergeImportMaps, renderImportMap, importMapText, importMapHash, cspHash, renderImportMapCsp, modulePreloads, renderModulePreload,
   createLock, lockKey, parseImports,
   injectImportMap, injectModulePreload, startup, createImporter,
   semver,
@@ -15,7 +15,7 @@ export {
 } from "./types.js";
 
 export type {
-  MPortOptions, SpecifierObject, MPortOrigin, Registry, ParsedSpecifier, Artifact, TraceEvent, Resolution,
+  MPortOptions, SpecifierObject, CspHashAlgorithm, MPortOrigin, Registry, ParsedSpecifier, Artifact, TraceEvent, Resolution,
   Node, Provider, ProviderDefinition, Match, Route, Routes, LockEntry, Lockfile, Lock, ImportMap, Probe,
   CircuitBreakerOptions, RegistryClient, RouterOptions, ResolveOptions, BuildOptions, BuildResult, Router,
   CacheStore, HealthState, ConflictReport, GraphOptions, GraphReport, RegistryInfo, OutdatedRow,

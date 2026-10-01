@@ -310,6 +310,18 @@ const { importMap, lock, graph } = await router.build(["react@^19"], { graph: { 
 
 `mport build --graph [--max-files N] [--max-depth N]` does the same from the CLI. It is a build-time download of everything, a tokenizer-level parser and same-origin only; see [the limits](docs/api.md#whole-graph-integrity-graph).
 
+### Content-Security-Policy for the inline import map
+
+A server that renders each response can put a nonce on the import map (`renderImportMap(map, { nonce })`). A **static site** cannot, and can allow the inline `<script type="importmap">` only by the hash of its exact text. mport owns that text, so it computes the hash:
+
+```js
+import { renderImportMapCsp } from "@johnhenry/mport";
+const { html, hash } = await renderImportMapCsp(importMap);   // hash is "'sha256-…'", quotes included
+// <meta http-equiv="Content-Security-Policy" content="script-src 'self' ${hash}">  …then `html` before your module scripts
+```
+
+`importMapHash(map)` returns just the hash. `injectImportMap()` and the Vite plugin emit the same text, so the same hash allows them too (`plugin.api.importMapHash()`). Write `html` out unchanged and recompute the hash whenever the map changes; details in [docs/api.md](docs/api.md#importmaphash-importmaptext-csphash-renderimportmapcsp). Real browsers enforce it in the [browser tests](#browser-tests-and-benchmarks); [example 18](examples/18-csp-hash-for-a-static-sites-import-map.mjs) is the offline version.
+
 ### CLI
 
 ```bash
@@ -382,7 +394,7 @@ With `startup()`, the import map has to be in the page before the first module t
 
 ## Browser tests and benchmarks
 
-`npm run test:browser` runs [Playwright](https://playwright.dev) tests on **Chromium, Firefox and WebKit** (`npx playwright install --with-deps` once; CI does this on all three, one job each). Pages are served from the repo by a small static server Playwright starts (`webServer`, port 8731, `MPORT_TEST_PORT` to change it), and every CDN and registry request is answered by `page.route` stubs, so the suite makes no network requests. It covers `examples/playground.html` (all ten scenarios must pass their own checks), `app.html` in both modes with esm.sh up, down and broken, `compat.html` (the 1.x API on both entry points), and `injectImportMap`, `startup`, `createImporter`, `injectModulePreload`, plus real engines' handling of generated import maps: scopes from `conflicts: "scope"`, whole-graph `integrity`, and a changed file refused where the engine enforces import-map integrity.
+`npm run test:browser` runs [Playwright](https://playwright.dev) tests on **Chromium, Firefox and WebKit** (`npx playwright install --with-deps` once; CI does this on all three, one job each). Pages are served from the repo by a small static server Playwright starts (`webServer`, port 8731, `MPORT_TEST_PORT` to change it), and every CDN and registry request is answered by `page.route` stubs, so the suite makes no network requests. It covers `examples/playground.html` (all ten scenarios must pass their own checks), `app.html` in both modes with esm.sh up, down and broken, `compat.html` (the 1.x API on both entry points), and `injectImportMap`, `startup`, `createImporter`, `injectModulePreload`, plus real engines enforcing a strict Content-Security-Policy against the import-map hash, and their handling of generated import maps: scopes from `conflicts: "scope"`, whole-graph `integrity`, and a changed file refused where the engine enforces import-map integrity.
 
 `npm run bench` (non-gating, also a `continue-on-error` CI job) measures mport's own work against a fake `fetch`, so it shows overhead, not network speed. On an Apple M-series laptop (Node 24):
 
@@ -461,6 +473,7 @@ Every export, from `@johnhenry/mport` (all of them), `@johnhenry/mport/firefox` 
 | [`entryInfo`](docs/api.md#entryinfo), [`entryOf`](docs/api.md#entryof), [`resolveExports`](docs/api.md#resolveexports) | `(packageJson, subpath?)` | Entry-file selection and CommonJS detection |
 | [`compileImportMap`](docs/api.md#compileimportmap), [`mergeImportMaps`](docs/api.md#mergeimportmaps) | | Import maps from resolutions; merging |
 | [`renderImportMap`](docs/api.md#renderimportmap), [`renderModulePreload`](docs/api.md#rendermodulepreload), [`modulePreloads`](docs/api.md#modulepreloads) | `(importMap, options?)` | HTML strings (`<script type="importmap">`, `<link rel="modulepreload">`) for server rendering |
+| [`renderImportMapCsp`, `importMapHash`](docs/api.md#importmaphash-importmaptext-csphash-renderimportmapcsp), `importMapText`, `cspHash` | `async (importMap, { algorithm?, nonce? }?)` | The CSP `'sha256-…'` of the inline import map, for static sites that cannot use a nonce |
 | [`createLock`](docs/api.md#createlock), [`lockKey`](docs/api.md#lockkey) | | Lockfiles and their keys |
 | [`injectImportMap`](docs/api.md#injectimportmap), [`injectModulePreload`](docs/api.md#injectmodulepreload), [`startup`](docs/api.md#startup), [`createImporter`](docs/api.md#createimporter) | | Browser runtime helpers |
 | [`semver`](docs/api.md#semver) | namespace | `parse`, `valid`, `compare`, `satisfies`, `maxSatisfying` |
@@ -513,7 +526,7 @@ The default race still mixes builds (raw jsDelivr/unpkg files against jspm's tra
 
 ## Examples
 
-[`examples/README.md`](examples/README.md) indexes them all. Seventeen numbered Node examples prove one behaviour each, offline, against a fake network (`npm run examples`, or `npm run example:05` for one): range resolution, fallback, race, CommonJS skipping, lockfile pinning, the circuit breaker, `verified()`, `router.import()` failover, `build()`, the CLI, the 1.x race, server-rendered import maps, conflicting versions scoped per dependent, whole-graph integrity, `outdated`/`update`, the Rollup plugin, and `local()` serving a package that is not on npm.
+[`examples/README.md`](examples/README.md) indexes them all. Eighteen numbered Node examples prove one behaviour each, offline, against a fake network (`npm run examples`, or `npm run example:05` for one): range resolution, fallback, race, CommonJS skipping, lockfile pinning, the circuit breaker, `verified()`, `router.import()` failover, `build()`, the CLI, the 1.x race, server-rendered import maps, conflicting versions scoped per dependent, whole-graph integrity, `outdated`/`update`, the Rollup plugin, `local()` serving a package that is not on npm, and the CSP hash of an import map.
 
 Three browser pages share one header, one timeline and one way of explaining results:
 

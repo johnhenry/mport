@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { rollup } from "rollup";
 import { build as viteBuild } from "vite";
 import { createRouter, esmSh, jsr } from "../src/core.mjs";
@@ -130,4 +131,14 @@ test("vite: the dev server is left alone by default; dev + importmap is refused"
   assert.equal(mportVite(router(), { dev: true }).apply({}, { command: "serve" }), true);
   assert.throws(() => mportVite(router(), { dev: true, mode: "importmap" }), /mode "external" only/);
   assert.equal(plugin.resolveId("react", undefined, { ssr: true }), null, "SSR builds are not rewritten to URLs");
+});
+
+test("vite: api.importMapHash() is the CSP hash of the exact script text Vite wrote into index.html", async () => {
+  const dir = await page({ "package.json": JSON.stringify({ dependencies: { react: "^19" } }) });
+  const plugin = mportVite(router(), { mode: "importmap", packageJson: true });
+  const { html } = await viteRun(dir, plugin);
+  const body = /<script type="importmap">([^<]*)<\/script>/.exec(html)[1];
+  const expected = `'sha256-${createHash("sha256").update(body, "utf8").digest("base64")}'`;
+  assert.equal(await plugin.api.importMapHash(), expected);
+  assert.match(await plugin.api.importMapHash({ algorithm: "sha384" }), /^'sha384-/);
 });

@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { builtinModules } from "node:module";
 import { parseSpecifier } from "./specifier.mjs";
+import { importMapHash } from "./importmap.mjs";
 
 const BUILTINS = new Set(builtinModules.map((m) => m.replace(/^node:/, "")));
 // a package.json range a registry can resolve (not workspace:, file:, git URLs, aliases or paths)
@@ -82,6 +83,11 @@ export function createBundlerCore(router, options = {}) {
     /** The import map (and lockfile) for what was routed: `router.build()` over `specifiers()`. */
     async importMap() {
       return router.build(this.specifiers(), buildOptions);
+    },
+
+    /** The CSP hash (`'sha256-…'`) of the inline import-map script the Vite plugin injects (importmap mode). */
+    async importMapHash(options) {
+      return importMapHash((await this.importMap()).importMap, options);
     },
   };
 }

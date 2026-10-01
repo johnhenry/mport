@@ -9,6 +9,7 @@
 // Dev server: untouched by default (Vite pre-bundles dependencies itself); `dev: true`
 // applies the same resolution there ("external" mode only).
 import { createBundlerCore } from "./bundler.mjs";
+import { importMapText } from "./importmap.mjs";
 
 export function mportVite(router, options = {}) {
   const core = createBundlerCore(router, options);
@@ -32,7 +33,7 @@ export function mportVite(router, options = {}) {
       async handler() {
         if (core.mode !== "importmap") return;
         const { importMap } = await core.importMap();
-        return [{ tag: "script", attrs: { type: "importmap" }, children: JSON.stringify(importMap), injectTo: "head-prepend" }];
+        return [{ tag: "script", attrs: { type: "importmap" }, children: importMapText(importMap), injectTo: "head-prepend" }];
       },
     },
   };
