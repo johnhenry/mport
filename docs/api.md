@@ -320,9 +320,11 @@ resolved and placed under its scope with the key you gave. A specifier that reso
 `ResolutionError("mport: no route for …")`; nothing is silently dropped. Any other
 rejection from `resolve()` rejects the build.
 
-`lock` is `router.lock.toJSON()`: every resolution this router has made so far,
-including earlier `resolve()` and `import()` calls, not only this build's specifiers.
-Use a fresh router per build if the lockfile should contain exactly one build's inputs.
+`lock` is `router.lock.toJSON()`: every resolution this router has made itself so far,
+including earlier `resolve()` and `import()` calls, not only this build's specifiers. It
+starts **empty**: entries of the `lock` option are read-only pins, never copied across, so
+specifiers you no longer build are pruned from the written lockfile. Use a fresh router
+per build if the lockfile should contain exactly one build's inputs.
 
 ### router.health, router.lock, router.name
 

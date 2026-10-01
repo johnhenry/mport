@@ -63,3 +63,16 @@ test("3. unversioned providers don't write the range into the lock as a version"
   const again = createRouter({ "*": esmSh() }, { fetch, probe: "none", lock: stale });
   assert.equal((await again.resolve("react@^19")).version, "19.2.0");
 });
+
+test("4. the output lock holds only this build's resolutions; the input lock only pins", async () => {
+  const fetch = fakeFetch({ ...registryFixtures });
+  const input = { lockfileVersion: 1, packages: {
+    "gone@1": { specifier: "gone@1", registry: "npm", version: "1.0.0", build: "esm.sh" },
+    "react@^19": { specifier: "react@^19", registry: "npm", version: "19.0.0", build: "esm.sh", provider: "esm.sh" },
+  } };
+  const router = createRouter({ "*": esmSh() }, { fetch, probe: "none", lock: input });
+  assert.deepEqual(router.lock.toJSON().packages, {});
+  const { lock } = await router.build(["react@^19"]);
+  assert.deepEqual(Object.keys(lock.packages), ["react@^19"]);
+  assert.equal(lock.packages["react@^19"].version, "19.0.0", "the pin is still honoured");
+});

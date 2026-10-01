@@ -92,7 +92,7 @@ export function createRouter(routes, options = {}) {
   // Pass `health` to share provider health (and open circuits) between routers.
   const health = options.health ?? new HealthRegistry({ now, ...circuitBreaker });
   const pins = createLock(lockData); // read-only: what the caller's lockfile pins
-  const lock = createLock(lockData); // what this router has resolved (written back by build())
+  const lock = createLock(); // what this router has resolved (written back by build()); starts empty so stale pins are pruned
   const probeFn =
     typeof probe === "function" ? probe
     : probe === "none" ? async () => ({})
