@@ -31,3 +31,18 @@ test("1. a successful import resets the failure streak", async () => {
   await assert.rejects(router.import("react@19.2.0"));
   assert.equal(router.health.isOpen("esm.sh"), false, "streak was reset by the good import");
 });
+
+test("2. resolveVersions:false skips entry-needing providers instead of asking the registry about a range", async () => {
+  const fetch = fakeFetch({ ...registryFixtures, ...ok("https://esm.sh/"), ...ok("https://cdn.jsdelivr.net/") });
+  const router = createRouter({ "*": [jsDelivr(), unpkg(), esmSh()] }, { fetch, resolveVersions: false });
+  const r = await router.resolve("react@^19");
+  assert.equal(r.provider, "esm.sh");
+  assert.equal(r.url, "https://esm.sh/react@^19");
+  const skips = r.trace.filter((e) => e.type === "skip");
+  assert.equal(skips.length, 2);
+  assert.match(skips[0].reason, /exact version/);
+  assert.ok(!fetch.log.some((l) => l.url.startsWith(NPM)), "no registry request was made");
+  // an exact version needs no lookup, so raw CDNs still work
+  const exact = await router.resolve("react@19.2.0");
+  assert.equal(exact.url, "https://cdn.jsdelivr.net/npm/react@19.2.0/index.js");
+});

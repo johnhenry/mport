@@ -142,9 +142,15 @@ export function createRouter(routes, options = {}) {
     const entries = new Map();
     const getEntry = async (reg = req.registry) => {
       if (!entries.has(reg)) {
-        entries.set(reg, pinned?.entry ? Promise.resolve({ file: pinned.entry, esm: true })
-          : reg === "npm" ? registry.entryInfo(req.name, await getVersion(reg), req.path)
-          : Promise.resolve(undefined));
+        entries.set(reg, (async () => {
+          if (pinned?.entry) return { file: pinned.entry, esm: true };
+          if (reg !== "npm") return undefined;
+          const version = await getVersion(reg);
+          // With resolveVersions: false the version may still be a range or tag, which
+          // the registry can't map to a package.json: report that instead of asking it.
+          if (!version || !valid(version)) return { unresolved: version ?? "latest" };
+          return registry.entryInfo(req.name, version, req.path);
+        })());
       }
       return entries.get(reg);
     };
@@ -172,7 +178,9 @@ export function createRouter(routes, options = {}) {
       async artifact(p, reg = req.registry) {
         const v = p.needsVersion ? await getVersion(reg) : req.range;
         const info = p.needsEntry && needsFile ? await getEntry(reg) : undefined;
-        return { registry: reg, name: req.name, version: v, path: req.path, entry: info?.file, esm: info?.esm };
+        const a = { registry: reg, name: req.name, version: v, path: req.path, entry: info?.file, esm: info?.esm };
+        if (info?.unresolved !== undefined) a.skip = `needs an exact version to find its entry file, but "${info.unresolved}" is not one (resolveVersions: false)`;
+        return a;
       },
       async cacheKey() {
         const v = resolveVersions || pinned ? await getVersion() : req.range;

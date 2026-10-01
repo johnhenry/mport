@@ -48,6 +48,7 @@ export async function select(p, req, ctx) {
   if (health?.isOpen(p.name)) throw skip(ctx, p, "circuit open");
 
   const artifact = await ctx.artifact(p, registry);
+  if (artifact.skip) throw skip(ctx, p, artifact.skip);
   if (artifact.esm === false && !ctx.allowCommonJS) {
     throw skip(ctx, p, `${artifact.entry} is CommonJS; raw file CDNs can't serve it to browsers (use an ESM-transforming CDN, or allowCommonJS)`);
   }

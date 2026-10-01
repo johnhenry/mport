@@ -211,7 +211,7 @@ Builds one array-form entry.
 |---|---|---|---|
 | `probe` | `"head" \| "import" \| "none" \| function` | `"head"` | How a candidate URL is checked. See [Probing](#probing). |
 | `lock` | `Lockfile` | none | A lockfile whose entries pin version, entry, build and integrity. See [Lockfiles](#lockfiles). |
-| `resolveVersions` | `boolean` | `true` | Resolve ranges to exact versions through the registries. With `false`, providers get the range (or nothing) as written, e.g. `https://esm.sh/react@^19`; exact versions and lockfile pins still apply. |
+| `resolveVersions` | `boolean` | `true` | Resolve ranges to exact versions through the registries. With `false`, providers get the range (or nothing) as written, e.g. `https://esm.sh/react@^19`; exact versions and lockfile pins still apply. Providers that need an entry file (`needsEntry`: jsDelivr raw, unpkg, jspm, `local()`) can't look one up for a range, so they **skip** with a reason (`needs an exact version to find its entry file…`) and the route falls through to e.g. esm.sh; an exact version or a lockfile pin still gets an entry. |
 | `circuitBreaker` | `{ failures?, reset? }` | `{ failures: 3, reset: 30000 }` | Options for this router's own [`HealthRegistry`](#healthregistry). Ignored when `health` is given. |
 | `health` | `HealthRegistry` | a new one | Share health and open circuits with another router (`health: other.health`). |
 | `target` | `string` | `"browser"` | Default target for [`prefer()`](#prefer). |
@@ -379,6 +379,7 @@ the reason shown:
 | a pinned build (`options.build` or the lockfile) equals the provider's build | `serves build "<b>", locked to "<pin>"` |
 | the provider has every required capability | `lacks <cap>, <cap>` |
 | the provider's circuit is closed | `circuit open` |
+| (after resolving the artifact) an entry file can be found: with `resolveVersions: false` and a range or tag, `needsEntry` providers can't | `needs an exact version to find its entry file, but "<range>" is not one (resolveVersions: false)` |
 | (after resolving the artifact) the entry is not CommonJS, unless `allowCommonJS` | `<entry> is CommonJS; raw file CDNs can't serve it to browsers (…)` |
 
 Then the URL is built and [probed](#probing).
