@@ -688,7 +688,7 @@ lookup:npm registry → resolved:npm registry → probe:esm.sh → fail:esm.sh �
 
 | Error | Extends | Thrown or rejected when | Notes |
 |---|---|---|---|
-| `ResolutionError` | `Error` | a registry lookup fails: the fetch itself throws (in browsers an unknown npm package's 404 has no CORS header and looks like this; the message says so), the registry answers 404 (`not found in the registry`) or another non-OK status, no version satisfies the range, or the range is neither a dist-tag nor valid; `router.build()` meets an unroutable or unmatched specifier | Propagates through `fallback()` and `race()` at once: no provider is blamed or put in its circuit. The fetch case has the original error as `cause`. |
+| `ResolutionError` | `Error` | a registry lookup fails: the fetch itself throws (in browsers an unknown npm package's 404 has no CORS header and looks like this; the message says so), the registry answers 404 (`not found in the registry`) or another non-OK status, no version satisfies the range, or the range is neither a dist-tag nor valid; `router.build()` meets an unroutable or unmatched specifier, or two specifiers map one import-map key to different URLs | Propagates through `fallback()` and `race()` at once: no provider is blamed or put in its circuit. The fetch case has the original error as `cause`. |
 | `RoutingError` | `AggregateError` | `fallback()` or `race()` ran out of providers; `router.import()` exhausted its mirrors after an import failure | `errors` holds each provider's (or import's) error, `SkipError`s included |
 | `SkipError` | `Error` | a node declined without trying | Normally ends up in a `RoutingError`'s `errors`; reaches the caller directly when the route is a single provider, cache or `prefer()` |
 | `IntegrityError` | `Error` | `verified()` got a non-OK response or a hash mismatch | As above: collected by `fallback()` / `race()`, direct from a lone `verified()` |
@@ -771,7 +771,11 @@ compileImportMap(resolved: Resolution[], scoped?: Record<string, Resolution[]>):
 `{ imports, scopes?, integrity? }`. Each Resolution maps `key → url`; a prefix key
 (ending `/`) maps to `base` (or the URL without its file name). `integrity` maps URL →
 hash for every Resolution with an `integrity` (prefix entries excluded at the top
-level). `scopes` and `integrity` are omitted when empty. For scoped lists, each entry's
+level). `scopes` and `integrity` are omitted when empty. Two Resolutions that map one key
+to **different** URLs (`react@18` and `react@19` both want `"react"`) throw a
+`ResolutionError` naming the key and both URLs, in `imports` and inside each scope alike,
+instead of keeping one silently; the same URL twice is fine. Give the second version its
+own scope (`router.build(specifiers, { scopes })`). For scoped lists, each entry's
 `key` is the key to use inside that scope.
 
 ### mergeImportMaps()

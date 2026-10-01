@@ -1,9 +1,17 @@
 // Compile routing decisions into a standard import map. The browser never needs
 // to know mport exists: this is the routing table in its native form.
 
-const put = (target, r, key = r.key) => {
-  if (key.endsWith("/")) target[key] = r.base ?? r.url.replace(/[^/]*$/, "");
-  else target[key] = r.url;
+import { ResolutionError } from "./registry.mjs";
+
+const put = (target, r, where = "imports", key = r.key) => {
+  const url = key.endsWith("/") ? r.base ?? r.url.replace(/[^/]*$/, "") : r.url;
+  if (key in target && target[key] !== url) {
+    throw new ResolutionError(
+      `mport: conflicting resolutions for "${key}" in ${where}: ${target[key]} and ${url}. ` +
+      `An import map maps a key to one URL; give the other version its own scope (build(specifiers, { scopes })).`,
+    );
+  }
+  target[key] = url;
 };
 
 /**
@@ -21,7 +29,7 @@ export function compileImportMap(resolved, scoped = {}) {
   for (const [scope, list] of Object.entries(scoped)) {
     scopes[scope] = {};
     for (const r of list) {
-      put(scopes[scope], r);
+      put(scopes[scope], r, `scope ${scope}`);
       if (r.integrity) integrity[r.url] = r.integrity;
     }
   }

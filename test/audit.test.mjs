@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  createRouter, esmSh, jsDelivr, unpkg, jspm, local, origin, fallback, race, verified, cache, HealthRegistry,
+  createRouter, compileImportMap, esmSh, jsDelivr, unpkg, jspm, local, origin, fallback, race, verified, cache, HealthRegistry,
 } from "../src/core.mjs";
 import { fakeFetch, registryFixtures, clock, NPM } from "./helpers.mjs";
 
@@ -106,4 +106,19 @@ test("5+6. cache() hits offline, keep entry/registry, and respect a ttl", async 
   const r = await c.resolve("react@^19");
   assert.equal(r.cached, false);
   assert.ok(r.trace.some((e) => e.type === "skip" && e.reason === "expired"));
+});
+
+test("7. two versions of one key throw instead of silently keeping one", async () => {
+  const router = createRouter({ "*": esmSh() }, { probe: "none", fetch: fakeFetch(registryFixtures) });
+  await assert.rejects(router.build(["react@18.3.1", "react@19.2.0"]), (e) => {
+    assert.equal(e.name, "ResolutionError");
+    assert.match(e.message, /conflicting resolutions for "react"/);
+    assert.match(e.message, /scope/);
+    return true;
+  });
+  // the same URL twice, and the scopes the message points to, are fine
+  const ok2 = await router.build(["react@^19", "react@19.2.0"], { scopes: { "https://old.example/": { react: "react@18.3.1" } } });
+  assert.deepEqual(ok2.importMap.imports, { react: "https://esm.sh/react@19.2.0" });
+  // inside one scope the same rule applies
+  assert.throws(() => compileImportMap([], { "/x/": [{ key: "a", url: "u1" }, { key: "a", url: "u2" }] }), /in scope \/x\//);
 });
