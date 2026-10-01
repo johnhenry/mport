@@ -285,6 +285,18 @@ const { importMap, conflicts } = await router.build(
 
 The default stays `"error"`: a silent choice of "which version the page's own code gets" is a decision, not a default. Limits (dependents are the packages in the build, not their transitive dependencies; scopes only affect bare imports, so they change nothing for esm.sh or jsDelivr `+esm`, which already import by URL) are in [docs/api.md](docs/api.md#conflicting-versions-conflicts-scope).
 
+### Integrity for the whole graph: `graph`
+
+`verified()` hashes the entry file only, and on esm.sh that file is a stub that re-exports from `/react@19.2.0/es2022/react.mjs`. `build(specifiers, { graph: true })` fetches each module, follows its static imports on the same origin, and records a hash for every file: as the import map's `integrity` (the browser verifies each one) and as the lockfile's `files`. The next build refuses a file whose bytes changed.
+
+```js
+const { importMap, lock, graph } = await router.build(["react@^19"], { graph: { maxFiles: 300, maxDepth: 10 } });
+// importMap.integrity: { "https://esm.sh/react@19.2.0?target=es2022": "sha384-…", "https://esm.sh/react@19.2.0/es2022/react.mjs": "sha384-…", … }
+// graph.truncated: [] unless a bound cut the walk short (also a `truncated` event)
+```
+
+`mport build --graph [--max-files N] [--max-depth N]` does the same from the CLI. It is a build-time download of everything, a tokenizer-level parser and same-origin only; see [the limits](docs/api.md#whole-graph-integrity-graph).
+
 ### CLI
 
 ```bash
@@ -303,7 +315,7 @@ export default {
 };
 ```
 
-Flags: `--config`, `--out importmap.json`, `--lock mport.lock.json`, `--relock`, `--conflicts error|scope`, `--trace`. A function config receives the parsed lockfile (`undefined` with `--relock` or when there is none): `export default ({ lock }) => createRouter(routes, { lock })`. A prebuilt router can't take a lockfile, so `--lock`/`--relock` with one is an error and `build` leaves the lock file alone. Details: [docs/api.md#the-cli](docs/api.md#the-cli).
+Flags: `--config`, `--out importmap.json`, `--lock mport.lock.json`, `--relock`, `--conflicts error|scope`, `--graph` (`--max-files`, `--max-depth`), `--trace`. A function config receives the parsed lockfile (`undefined` with `--relock` or when there is none): `export default ({ lock }) => createRouter(routes, { lock })`. A prebuilt router can't take a lockfile, so `--lock`/`--relock` with one is an error and `build` leaves the lock file alone. Details: [docs/api.md#the-cli](docs/api.md#the-cli).
 
 ## In the browser
 
@@ -365,7 +377,7 @@ Every export, from `@johnhenry/mport` (all of them), `@johnhenry/mport/firefox` 
 | [`createRouter`](docs/api.md#createrouter) | `(routes, options?) → Router` | Build a router. Options: `probe`, `lock`, `resolveVersions`, `circuitBreaker`, `health`, `target`, `capabilities`, `fetch`, `importer`, `registries`, `registry`, `onEvent`, `now`, `allowCommonJS`, `name` |
 | [`router.resolve`](docs/api.md#routerresolve) | `(specifier, options?) → Promise<Resolution \| null>` | Resolve one specifier. Options: `signal`, `exclude`, `build`, `integrity`, `target`, `capabilities`, `relock`, `onEvent` |
 | [`router.import`](docs/api.md#routerimport) | `(specifier, options?) → Promise<module>` | Resolve and import, failing over when the import fails |
-| [`router.build`](docs/api.md#routerbuild) | `(specifiers, { scopes?, conflicts?, signal? }?) → Promise<{ importMap, lock, conflicts }>` | Resolve many and compile an import map and lockfile; `conflicts: "scope"` scopes conflicting versions per dependent |
+| [`router.build`](docs/api.md#routerbuild) | `(specifiers, { scopes?, conflicts?, graph?, signal? }?) → Promise<{ importMap, lock, conflicts, graph? }>` | Resolve many and compile an import map and lockfile; `conflicts: "scope"` scopes conflicting versions per dependent; `graph` hashes every file of each module's import graph |
 | `router.health`, `router.lock`, `router.name` | | The router's [`HealthRegistry`](docs/api.md#healthregistry), its in-memory lock, its name |
 | [`route`](docs/api.md#route) | `(match, use) → { match, use }` | One array-form route |
 | [`esmSh`, `jsDelivr`, `unpkg`, `jspm`, `jsr`, `github`, `local`](docs/api.md#built-in-providers) | `(options?) → Provider` | Built-in providers |
@@ -473,7 +485,7 @@ The pages talk to the real CDNs and registries; outages, latency and tampering a
 
 - **Raw file CDNs serve packages exactly as published.** A CommonJS entry can't be imported by a browser, and mport's detection of CommonJS is a heuristic over `package.json` (file extension, `type`, `module`, export conditions, naming conventions): a `.js` ES module with none of those signals is skipped, and a CommonJS file that looks like ESM is served. Raw ES modules also keep their own bare imports (`import "preact"`), which only resolve if the page's import map covers them; ESM-transforming CDNs (esm.sh, jsDelivr `+esm`) rewrite those. Permanent: it follows from what raw CDNs are.
 - **Import maps have no runtime fallback.** The platform lets a specifier map to one URL and gives no hook to retry when that fetch fails, so a map built with `startup()` or the CLI is only as available as the mirror it chose. Failover after page load exists only for loads that go through `router.import()` / `createImporter()`, and switching builds at runtime only works when the new build's own imports resolve. Permanent until import maps grow a fallback mechanism.
-- **A probe proves availability, not correctness.** `probe: "head"` learns that a URL answers, not that it is an ES module that will evaluate; `probe: "none"` checks nothing and records no health; `resolveVersions: false` hands the CDN a range it resolves on its own (so providers that need an entry file, the raw CDNs, skip a range and fall through). `verified()` hashes the entry module only, not the modules it imports in turn, and checks bytes only against a hash you already have: without a pinned `integrity` it records whatever the first mirror served (trust on first use). By design: stronger checks cost a download per candidate.
+- **A probe proves availability, not correctness.** `probe: "head"` learns that a URL answers, not that it is an ES module that will evaluate; `probe: "none"` checks nothing and records no health; `resolveVersions: false` hands the CDN a range it resolves on its own (so providers that need an entry file, the raw CDNs, skip a range and fall through). `verified()` hashes the entry module only; `build(…, { graph: true })` hashes the modules it imports in turn too. Either checks bytes only against a hash you already have: without a pinned `integrity` it records whatever the first mirror served (trust on first use). By design: stronger checks cost a download per candidate.
 - **The npm registry answers an unknown package with a 404 that carries no CORS header.** In a browser that surfaces as a network error, so "this package doesn't exist" and "the registry is unreachable" are the same `ResolutionError` (its message says so). Registry lookups also cost a request per package per page load; resolve at build time or ship a lockfile to avoid both. A property of registry.npmjs.org, not of mport.
 
 ## Family

@@ -13,6 +13,7 @@ export { createRegistry, entryOf, entryInfo, resolveExports, ResolutionError } f
 export { compileImportMap, mergeImportMaps, renderImportMap, modulePreloads, renderModulePreload } from "./importmap.mjs";
 
 export { createLock, lockKey } from "./lock.mjs";
+export { parseImports } from "./graph.mjs";
 export { injectImportMap, injectModulePreload, startup, createImporter } from "./runtime.mjs";
 export * as semver from "./semver.mjs";
 export { DEFAULT_CACHE_KEY } from "./v1.mjs";

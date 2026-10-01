@@ -309,7 +309,7 @@ at runtime only works when the page's import map already covers those.
 ### router.build()
 
 ```ts
-router.build(specifiers: string[], options?: { scopes?, signal?, conflicts? }): Promise<{ importMap: ImportMap, lock: Lockfile, conflicts: ConflictReport[] }>
+router.build(specifiers: string[], options?: { scopes?, signal?, conflicts?, graph? }): Promise<{ importMap: ImportMap, lock: Lockfile, conflicts: ConflictReport[], graph?: GraphReport }>
 ```
 
 Resolves every specifier concurrently and compiles an [import map](#import-maps).
@@ -323,6 +323,9 @@ rejection from `resolve()` rejects the build.
 Any other value is a `TypeError`. The result's `conflicts` array holds one
 [`ConflictReport`](#conflicting-versions-conflicts-scope) per conflicting key that `"scope"` handled
 (always empty with `"error"`).
+
+`graph` (default off) is `true` or [`GraphOptions`](#whole-graph-integrity-graph); the result then
+has a `graph` report.
 
 `lock` is `router.lock.toJSON()`: every resolution this router has made itself so far,
 including earlier `resolve()` and `import()` calls, not only this build's specifiers. It
@@ -387,6 +390,62 @@ tell you about.
   it. The page's own modules can only ever see the unscoped version.
 - A dependent whose range both the unscoped version and another satisfy keeps the unscoped
   one. A dependent whose range no listed version satisfies gets nothing.
+
+#### Whole-graph integrity (`graph`)
+
+`verified()` proves the bytes of the one URL a specifier resolves to. On esm.sh that URL
+is a stub (`export * from "/react@19.2.0/es2022/react.mjs"`) and the real code is one hop
+away, unchecked. `build(specifiers, { graph })` closes that gap at build time:
+
+1. For every module the build maps (top-level, scoped, conflict-scoped; **not** prefix
+   specifiers such as `lit/`, which map a directory), it `fetch`es the URL with the
+   router's `fetch` and computes its SRI hash (`algorithm`, default `sha384`).
+2. It parses the file's **static** imports (`import … from`, `import "x"`,
+   `export … from`, `export * from`, with or without `with { … }` attributes;
+   `import("literal")` as well when `dynamic: true`) with [`parseImports()`](#parseimports),
+   resolves each against the file's URL, and repeats for every **same-origin** URL it
+   has not seen. Origin means the module's own origin plus `origins`.
+3. Every hash goes into the import map's `integrity` (so the browser verifies every file),
+   and into the lockfile's top-level `files` map. The entry's hash is also its package's
+   `integrity`. If `verified()` or the lockfile already pinned a different hash for the
+   entry, the build rejects with `IntegrityError`.
+
+On the next build the lockfile's `files` are expectations: a file whose bytes no longer
+match rejects with `IntegrityError` (traced `fail`, `phase: "integrity"`) instead of being
+re-recorded. Dropping the lock (`relock`, a router without `lock`) accepts the new bytes.
+A file that cannot be fetched (non-OK, network error) **fails the build**: it could not be
+hashed, and an unlisted file is an unverified one.
+
+`GraphOptions`: `maxFiles` (default 500, counted across the whole build), `maxDepth`
+(default 20 hops from a module), `dynamic` (false), `origins` (none), `algorithm`
+(`"sha384"`), `concurrency` (8). Hitting a bound does not fail the build: the files past it
+are not fetched and the walk reports it, as a `{ type: "truncated", phase: "graph",
+provider, url, reason: "maxFiles" | "maxDepth", limit, skipped, examples }` event through
+`onEvent` and as `result.graph.truncated` (one entry per module and bound). The CLI prints
+a warning for each. A truncated lockfile is a *partial* one: treat the warning as an
+error in CI, or raise the bound.
+
+`result.graph` is `{ files, truncated, bare, skipped }`: `bare` lists the bare specifiers
+found inside files (raw CDN files import their dependencies by name, so they depend on
+your import map; they are **not** followed), `skipped` the imports left alone (other
+origins, non-HTTP schemes).
+
+**Limits:**
+
+- *The parser is a tokenizer, not a JavaScript parser.* It skips comments, strings,
+  template literals and regular expressions and finds import/export statements; it is
+  exercised on minified esm.sh output. A construct it misreads (an obscure regex or
+  division ambiguity) can hide or invent an import; a hidden one is simply not hashed.
+- Dynamic imports with computed arguments, `new Worker(url)`, `fetch()`ed assets, CSS
+  and anything else the code loads at run time are not in the graph, and neither are
+  other origins (a CDN file importing from a second CDN).
+- It hashes the bytes *the build machine's* request received. esm.sh pins `?target=` so
+  those bytes don't depend on the User-Agent; a CDN that varies its output per client
+  produces a hash some browsers will reject.
+- Browsers verify import map `integrity` only where they implement the key; where they
+  don't, the entries are ignored (as an unknown key is) and nothing is verified.
+- Every file is downloaded once more at build time (the entry is fetched again even
+  after `verified()`), so this is for build and CI, not page load.
 
 ### router.health, router.lock, router.name
 
@@ -486,11 +545,11 @@ Notes that follow from the table:
   hash. `esmSh()` therefore adds `?target=es2022` (`esTarget`, also on `jsr()` and
   `github({ via: "esm.sh" })`; `esTarget: null` leaves it to esm.sh). A **prefix** mapping
   (`lit/`) points at a directory, which can't carry a query, so it stays unpinned.
-- **Integrity covers the entry module only.** `verified()` hashes the one URL it selected.
-  The modules that file imports in turn (esm.sh's rewritten `/react@19.2.0/es2022/react.mjs`
+- **`verified()` covers the entry module only.** It hashes the one URL it selected. The
+  modules that file imports in turn (esm.sh's rewritten `/react@19.2.0/es2022/react.mjs`
   chains, dependencies of a raw file) are fetched by the browser without an integrity
-  check unless you add them to the import map's `integrity` yourself; the hash proves the
-  entry file's bytes, not the whole dependency graph.
+  check unless the import map's `integrity` lists them. `build(specifiers, { graph: true })`
+  walks the graph and lists them: see [Whole-graph integrity](#whole-graph-integrity-graph).
 - `jsr()` defaults to esm.sh's build, so it and `esmSh()` are mirrors of each other.
 - `github()` defaults to jsDelivr's `"npm"` build, so it can stand in for other raw mirrors
   of a GitHub-hosted package only if they serve the same files.
@@ -768,6 +827,9 @@ as `error.trace`; `onEvent` receives each event as it happens. Every event has
 | `fail` (no phase) | the probe failed | `provider`, `url`, `ms`, `error` |
 | `aborted` | a race loser's probe was cancelled, or finished after the race was decided | `provider`, `url`, `ms`; `reason: "lost the race"` for the late finisher |
 | `fail`, `phase: "integrity"` | `verified()` got bytes with the wrong hash | `provider`, `url`, `error: "expected …, got …"` |
+| `fail`, `phase: "integrity"` | `build({ graph })` fetched a file whose hash differs from the lockfile's `files` entry. **`onEvent` only** | `provider`, `url`, `error` |
+| `truncated`, `phase: "graph"` | `build({ graph })` hit `maxFiles` or `maxDepth` and left files unhashed. **`onEvent` only** | `provider`, `url` (the module), `reason`, `limit`, `skipped`, `examples` |
+| `conflict` | `build({ conflicts: "scope" })` handled one conflicting key. **`onEvent` only** | `provider: "build"`, `reason` |
 | `fail`, `phase: "import"` | `router.import()` failed to import a resolved URL. **`onEvent` only**, not in a trace. | `provider`, `url`, `error` |
 
 A typical fallback where esm.sh is down:
@@ -805,6 +867,11 @@ are exported, so `instanceof` works; `error.name` is the class name.
   }
 }
 ```
+
+With `build(…, { graph })` the lockfile also has a top-level `files` map, URL → SRI hash,
+for every file of every locked module's import graph (keys sorted); see
+[Whole-graph integrity](#whole-graph-integrity-graph). Without `graph` the key is absent.
+`createLock()`'s `getFile(url)` and `setFile(url, integrity)` read and write it.
 
 Entry fields, in this order: `specifier`, `registry`, `name`, `range`, `version`, `path`,
 `entry`, `build`, `provider`, `url`, `integrity`. Undefined and empty-string values are
@@ -846,21 +913,22 @@ was written when the lockfile was made.
 ### createLock()
 
 ```ts
-createLock(data?: { packages? }): { get(key), set(key, entry), toJSON() }
+createLock(data?: { packages?, files? }): { get(key), set(key, entry), getFile(url), setFile(url, integrity), toJSON() }
 ```
 
 The in-memory lock the router uses. `set` keeps only the fields above; `toJSON()` returns
-`{ lockfileVersion: 1, packages }` sorted by key.
+`{ lockfileVersion: 1, packages, files? }` sorted by key (`files` only when non-empty).
 
 ## Import maps
 
 ### compileImportMap()
 
 ```ts
-compileImportMap(resolved: Resolution[], scoped?: Record<string, Resolution[]>): ImportMap
+compileImportMap(resolved: Resolution[], scoped?: Record<string, Resolution[]>, extra?: { integrity?: Record<string, string> }): ImportMap
 ```
 
-`{ imports, scopes?, integrity? }`. Each Resolution maps `key → url`; a prefix key
+`{ imports, scopes?, integrity? }`. `extra.integrity` (URL → hash) is merged into the map's
+`integrity`, which is how `build({ graph })` adds the files of the import graph. Each Resolution maps `key → url`; a prefix key
 (ending `/`) maps to `base` (or the URL without its file name). `integrity` maps URL →
 hash for every Resolution with an `integrity` (prefix keys are excluded, at the top
 level and in scopes alike: the hash is of one entry file, not of the directory a prefix maps). `scopes` and `integrity` are omitted when empty. Two Resolutions that map one key
@@ -915,6 +983,19 @@ import map so the browser fetches the modules before the importing script runs.
 const { importMap } = await router.build(["react@^19"]);
 res.send(`<head>${renderModulePreload(importMap)}${renderImportMap(importMap)}</head>`);
 ```
+
+### parseImports()
+
+```ts
+parseImports(source: string, options?: { dynamic?: boolean }): string[]
+```
+
+The specifiers a JavaScript module imports **statically**, in source order: `import … from "x"`,
+`import "x"`, `export … from "x"`, `export * from "x"`, `export * as ns from "x"`. With
+`dynamic: true`, `import("x")` calls whose first argument is a string literal as well
+(computed ones are never reported). Text inside comments, strings, template literals and
+regular expressions is ignored. A tokenizer, not a parser; see the
+[limits](#whole-graph-integrity-graph). It is what `build({ graph })` uses.
 
 ## Registry helpers and CommonJS detection
 
@@ -1064,6 +1145,7 @@ match `20.0.0-rc.1`; `>=20.0.0-rc.0` does). An unparseable range throws `TypeErr
 
 ```
 mport build   [specifier...] [--config file] [--out importmap.json] [--lock mport.lock.json] [--relock] [--conflicts error|scope]
+              [--graph [--max-files N] [--max-depth N]]
 mport resolve <specifier> [--config file] [--trace] [--lock mport.lock.json] [--relock]
 mport --help
 ```
@@ -1078,6 +1160,8 @@ global `fetch` (Node 18+; the package declares Node >= 26).
 | `--lock` | `-l` | `mport.lock.json` | the lockfile both commands read (if it exists) and `build` writes. Not for prebuilt-router configs (error) |
 | `--relock` | | `false` | don't read the lockfile (not for prebuilt-router configs: error) |
 | `--conflicts` | | config's `conflicts`, else `error` | `build`: `scope` generates import-map scopes for conflicting versions (see [Conflicting versions](#conflicting-versions-conflicts-scope)) |
+| `--graph` | | `false` (or config's `graph`) | `build`: hash the whole import graph (see [Whole-graph integrity](#whole-graph-integrity-graph)); the lockfile gets `files`, the import map `integrity` for every file; prints a warning per truncated walk |
+| `--max-files`, `--max-depth` | | 500, 20 | the graph bounds; imply `--graph` |
 | `--trace` | | `false` | `resolve` prints the trace too |
 | `--help` | `-h` | | print usage |
 
@@ -1091,6 +1175,7 @@ global `fetch` (Node 18+; the package declares Node >= 26).
 | `options` | `{}` | passed to `createRouter`, with `lock` set from `--lock` |
 | `specifiers` | `[]` | what `build` resolves when none are given on the command line |
 | `scopes` | none | passed to `build` |
+| `graph` | off | `true` or `GraphOptions`, passed to `build` |
 | `conflicts` | `"error"` | passed to `build` (the `--conflicts` flag overrides it) |
 
 With no config at all, the default routes are used.

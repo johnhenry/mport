@@ -120,11 +120,11 @@ export interface Artifact {
 }
 
 export interface TraceEvent {
-  type: "lookup" | "resolved" | "probe" | "ok" | "selected" | "fail" | "skip" | "aborted" | "conflict";
+  type: "lookup" | "resolved" | "probe" | "ok" | "selected" | "fail" | "skip" | "aborted" | "conflict" | "truncated";
   /** for "resolved": the exact version the registry lookup chose */
   version?: string;
-  /** "import": router.import() failed to load a resolved URL; "integrity": verified() rejected it */
-  phase?: "import" | "integrity";
+  /** "import": router.import() failed to load a resolved URL; "integrity": verified() or the graph walk rejected it; "graph": the graph walk hit a bound */
+  phase?: "import" | "integrity" | "graph";
   /** provider name, cache name, or "<registry> registry" for lookups */
   provider: string;
   /** the candidate URL; for lookup/resolved, a pseudo-URL such as "npm:react@^19" */
@@ -133,6 +133,11 @@ export interface TraceEvent {
   /** for "skip": why; for "aborted": "lost the race" when an uncancellable probe finished late */
   reason?: string;
   error?: string;
+  /** for "truncated": the bound that was hit ("maxFiles" | "maxDepth"), its value, and how many files were not fetched */
+  limit?: number;
+  skipped?: number;
+  /** for "truncated": a few of the URLs that were not fetched */
+  examples?: string[];
   /** for "ok" from cache() */
   cached?: boolean;
   /** timestamp from the router's `now()` */
@@ -195,11 +200,16 @@ export type LockEntry = Partial<Pick<Resolution,
 export interface Lockfile {
   lockfileVersion: 1;
   packages: Record<string, LockEntry>;
+  /** URL → SRI hash of every file of each locked module's import graph (written by build() with `graph`) */
+  files?: Record<string, string>;
 }
 
 /** An in-memory lockfile (router.lock, createLock()). */
 export interface Lock {
   get(key: string): LockEntry | undefined;
+  /** the recorded hash of one graph file */
+  getFile(url: string): string | undefined;
+  setFile(url: string, integrity: string): void;
   /** stores the known fields of `entry`, dropping undefined and "" values */
   set(key: string, entry: Partial<Resolution>): void;
   /** { lockfileVersion: 1, packages } with keys sorted */
@@ -293,6 +303,38 @@ export interface BuildOptions {
    * so each dependent package gets the version its manifest asks for.
    */
   conflicts?: "error" | "scope";
+  /**
+   * Walk each module's static import graph and record the integrity of every file (import map
+   * `integrity` entries and the lockfile's `files`). `true` uses the defaults.
+   */
+  graph?: boolean | GraphOptions;
+}
+
+export interface GraphOptions {
+  /** most files fetched in one build, across all modules (default 500) */
+  maxFiles?: number;
+  /** most import hops from a module; the module itself is depth 0 (default 20) */
+  maxDepth?: number;
+  /** also follow `import("literal")` (default false: static imports only) */
+  dynamic?: boolean;
+  /** origins besides each module's own that may be followed (default none) */
+  origins?: string[];
+  /** hash algorithm (default "sha384") */
+  algorithm?: "sha256" | "sha384" | "sha512";
+  /** simultaneous requests (default 8) */
+  concurrency?: number;
+}
+
+/** What a `graph` build did (BuildResult.graph). */
+export interface GraphReport {
+  /** files fetched and hashed */
+  files: number;
+  /** one entry per module and bound that cut the walk short; empty when it completed */
+  truncated: Array<{ root: string; reason: "maxFiles" | "maxDepth"; limit: number; skipped: number; urls: string[] }>;
+  /** bare specifiers found (they resolve through the import map, so they were not followed), sorted */
+  bare: string[];
+  /** imports not followed: other origins, non-http(s) schemes */
+  skipped: Array<{ url: string; from: string; reason: string }>;
 }
 
 /** What `conflicts: "scope"` did about one conflicting import-map key. */
@@ -312,6 +354,8 @@ export interface BuildResult {
   lock: Lockfile;
   /** one entry per conflicting key resolved by `conflicts: "scope"` (empty otherwise) */
   conflicts: ConflictReport[];
+  /** present when `graph` was requested */
+  graph?: GraphReport;
 }
 
 export interface Router {
@@ -427,7 +471,13 @@ export function entryOf(pkg: Record<string, unknown>, subpath?: string): string;
 export function entryInfo(pkg: Record<string, unknown>, subpath?: string): { file: string; esm: boolean; hasExports: boolean };
 export function resolveExports(exportsField: unknown, subpath?: string): string | undefined;
 
-export function compileImportMap(resolved: Array<Pick<Resolution, "key" | "url"> & Partial<Resolution>>, scoped?: Record<string, Array<Pick<Resolution, "key" | "url"> & Partial<Resolution>>>): ImportMap;
+export function compileImportMap(
+  resolved: Array<Pick<Resolution, "key" | "url"> & Partial<Resolution>>,
+  scoped?: Record<string, Array<Pick<Resolution, "key" | "url"> & Partial<Resolution>>>,
+  o?: { integrity?: Record<string, string> },
+): ImportMap;
+/** The module specifiers a JavaScript source imports statically (and `import("literal")` with `dynamic`). */
+export function parseImports(source: string, o?: { dynamic?: boolean }): string[];
 export function mergeImportMaps(...maps: ImportMap[]): ImportMap;
 /** `<script type="importmap">…</script>` as an HTML string for server rendering (JSON escaped so nothing ends the script early). */
 export function renderImportMap(map: ImportMap, o?: { nonce?: string }): string;

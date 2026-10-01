@@ -14,10 +14,11 @@
 import { parseSpecifier, keyOf } from "./specifier.mjs";
 import { createRegistry, ResolutionError } from "./registry.mjs";
 import { valid } from "./semver.mjs";
-import { fallback, HealthRegistry, SkipError, RoutingError, note } from "./strategies.mjs";
+import { fallback, HealthRegistry, SkipError, RoutingError, IntegrityError, note } from "./strategies.mjs";
 import { custom } from "./providers.mjs";
 import { compileImportMap } from "./importmap.mjs";
 import { planConflicts } from "./conflicts.mjs";
+import { walkGraph } from "./graph.mjs";
 import { createLock, lockKey } from "./lock.mjs";
 
 export const route = (match, use) => ({ match, use });
@@ -271,8 +272,10 @@ export function createRouter(routes, options = {}) {
      * Resolve many specifiers and compile an import map plus lockfile.
      * `conflicts`: "error" (default) throws when two specifiers map one key to different URLs;
      * "scope" keeps the first and scopes the others to the packages that depend on them.
+     * `graph`: also fetch each module, follow its static imports and record every file's
+     * integrity (see graph.mjs); `true` or { maxFiles, maxDepth, dynamic, origins, algorithm }.
      */
-    async build(specifiers, { scopes = {}, signal, conflicts = "error" } = {}) {
+    async build(specifiers, { scopes = {}, signal, conflicts = "error", graph = false } = {}) {
       if (conflicts !== "error" && conflicts !== "scope") throw new TypeError(`mport: build option conflicts must be "error" or "scope", got ${JSON.stringify(conflicts)}`);
       let resolved = await Promise.all(specifiers.map(async (s) => {
         const r = await resolve(s, { signal });
@@ -302,9 +305,49 @@ export function createRouter(routes, options = {}) {
           try { onEvent?.({ type: "conflict", provider: "build", reason: `${c.key}: kept ${c.kept.url}; ${c.scoped.length} scoped, ${c.unscoped.length} unreachable`, at: now() }); } catch {}
         }
       }
-      return { importMap: compileImportMap(resolved, scoped), lock: lock.toJSON(), conflicts: report };
+      let files;
+      let graphReport;
+      if (graph) {
+        const roots = [...resolved, ...Object.values(scoped).flat()].filter((r) => !r.key.endsWith("/"));
+        ({ files, report: graphReport } = await lockGraph(roots, graph === true ? {} : graph, signal));
+      }
+      return {
+        importMap: compileImportMap(resolved, scoped, { integrity: files }),
+        lock: lock.toJSON(),
+        conflicts: report,
+        ...(graphReport && { graph: graphReport }),
+      };
     },
   };
+
+  // Walk each root's import graph, hash every file, check against the lockfile's recorded
+  // hashes, and write the new ones into the router's lock (and each root's `integrity`).
+  async function lockGraph(roots, options, signal) {
+    const emit = (root, event) => {
+      const e = { provider: root.provider, ...event, at: now() };
+      try { onEvent?.(e); } catch {}
+    };
+    const { files, truncated, bare, skipped } = await walkGraph(roots, {
+      ...options,
+      fetch,
+      signal,
+      expect: (url) => pins.getFile(url),
+      report: (root, event) => emit(roots.find((r) => new URL(r.url).href === new URL(root.url).href) ?? root, event),
+    });
+    for (const [url, integrity] of files) lock.setFile(url, integrity);
+    for (const r of roots) {
+      const entry = files.get(new URL(r.url).href);
+      if (entry === undefined) continue;
+      if (r.integrity && r.integrity !== entry) {
+        throw new IntegrityError(`mport: integrity mismatch for ${r.url}: expected ${r.integrity}, got ${entry}`);
+      }
+      r.integrity = entry;
+      const key = lockKey(parseSpecifier(r.specifier));
+      const rec = lock.get(key);
+      if (rec) lock.set(key, { ...rec, integrity: entry });
+    }
+    return { files: Object.fromEntries(files), report: { files: files.size, truncated, bare: [...bare].sort(), skipped } };
+  }
 
   /** The directory URL of the package a Resolution points into (what an import-map scope is keyed by). */
   function rootOf(r) {

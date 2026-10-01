@@ -11,6 +11,10 @@
 //   }
 // }
 //
+// Built with `graph`, the lockfile also has a top-level `files` map, URL → SRI hash, for
+// every file of each module's static import graph; a later build refuses a file whose
+// bytes no longer match.
+//
 // Keys are the specifier as written, normalized: a registry prefix appears only
 // when the specifier had one ("npm:react@^19", "jsr:@std/path@^1",
 // "github:user/repo@v1"), a trailing "/" is dropped, and "gh:" is spelled
@@ -26,10 +30,16 @@ export const lockKey = (req) => {
 
 const FIELDS = ["specifier", "registry", "name", "range", "version", "path", "entry", "build", "provider", "url", "integrity"];
 
+const byKey = ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0);
+
 export function createLock(data) {
   const packages = new Map(Object.entries(data?.packages ?? {}));
+  // URL → SRI hash of every file of the import graph (see build()'s `graph` option)
+  const files = new Map(Object.entries(data?.files ?? {}));
   return {
     get: (key) => packages.get(key),
+    getFile: (url) => files.get(url),
+    setFile: (url, integrity) => void files.set(url, integrity),
     set(key, entry) {
       const rec = {};
       for (const f of FIELDS) if (entry[f] !== undefined && entry[f] !== "") rec[f] = entry[f];
@@ -37,7 +47,8 @@ export function createLock(data) {
     },
     toJSON: () => ({
       lockfileVersion: 1,
-      packages: Object.fromEntries([...packages].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))),
+      packages: Object.fromEntries([...packages].sort(byKey)),
+      ...(files.size && { files: Object.fromEntries([...files].sort(byKey)) }),
     }),
   };
 }

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// mport build   [specifier...] [--config mport.config.mjs] [--out importmap.json] [--lock mport.lock.json] [--relock] [--conflicts error|scope]
+// mport build   [specifier...] [--config mport.config.mjs] [--out importmap.json] [--lock mport.lock.json] [--relock]
+//               [--conflicts error|scope] [--graph [--max-files N] [--max-depth N]]
 // mport resolve <specifier> [--config mport.config.mjs] [--trace]
 //
 // The config module's default export is one of
@@ -17,6 +18,7 @@ import { esmSh, jsDelivr, unpkg } from "../src/providers.mjs";
 
 const USAGE = `usage:
   mport build [specifier...] [--config file] [--out importmap.json] [--lock mport.lock.json] [--relock] [--conflicts error|scope]
+              [--graph [--max-files N] [--max-depth N]]
   mport resolve <specifier> [--config file] [--trace]`;
 
 const exists = (p) => access(p).then(() => true, () => false);
@@ -32,6 +34,9 @@ export async function main(argv = process.argv.slice(2), { log = console.log, cw
       relock: { type: "boolean", default: false },
       trace: { type: "boolean", default: false },
       conflicts: { type: "string" },
+      graph: { type: "boolean", default: false },
+      "max-files": { type: "string" },
+      "max-depth": { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -67,7 +72,13 @@ export async function main(argv = process.argv.slice(2), { log = console.log, cw
   if (command === "build") {
     const list = specs.length ? specs : config.specifiers ?? [];
     if (!list.length) throw new Error("mport build: no specifiers (pass them or set `specifiers` in the config)");
-    const { importMap, lock: newLock } = await router.build(list, { scopes: config.scopes, conflicts: values.conflicts ?? config.conflicts });
+    const graph = values.graph || values["max-files"] || values["max-depth"]
+      ? { ...(config.graph === true ? {} : config.graph), ...(values["max-files"] && { maxFiles: +values["max-files"] }), ...(values["max-depth"] && { maxDepth: +values["max-depth"] }) }
+      : config.graph;
+    const { importMap, lock: newLock, graph: walked } = await router.build(list, { scopes: config.scopes, conflicts: values.conflicts ?? config.conflicts, graph });
+    for (const t of walked?.truncated ?? []) {
+      log(`mport: warning: the import graph of ${t.root} was cut short at ${t.reason} ${t.limit} (${t.skipped} file(s) not hashed)`);
+    }
     await writeFile(resolvePath(cwd, values.out), JSON.stringify(importMap, null, 2) + "\n");
     const n = Object.keys(importMap.imports).length;
     if (prebuilt) {
@@ -75,7 +86,7 @@ export async function main(argv = process.argv.slice(2), { log = console.log, cw
       return 0;
     }
     await writeFile(lockPath, JSON.stringify(newLock, null, 2) + "\n");
-    log(`mport: wrote ${values.out} (${n} imports) and ${lockName}`);
+    log(`mport: wrote ${values.out} (${n} imports) and ${lockName}${walked ? ` (${walked.files} files hashed)` : ""}`);
     return 0;
   }
   throw new Error(`unknown command "${command}"\n${USAGE}`);

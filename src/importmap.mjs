@@ -20,10 +20,11 @@ const put = (target, r, where = "imports", key = r.key) => {
 /**
  * @param {Array} resolved router.resolve() results
  * @param {Record<string, Array>} [scoped] scope URL → resolved results (with .key)
+ * @param {{ integrity?: Record<string,string> }} [extra] more URL → hash entries (the files of an import graph)
  */
-export function compileImportMap(resolved, scoped = {}) {
+export function compileImportMap(resolved, scoped = {}, { integrity: extra } = {}) {
   const map = { imports: {} };
-  const integrity = {};
+  const integrity = { ...extra };
   for (const r of resolved) {
     put(map.imports, r);
     if (r.integrity && !r.key.endsWith("/")) integrity[r.url] = r.integrity;

@@ -86,3 +86,26 @@ test("13. build --conflicts scope (or config.conflicts) scopes conflicting versi
   const map = JSON.parse(await readFile(join(dir, "importmap.json"), "utf8"));
   assert.deepEqual(map.scopes, { "https://cdn.jsdelivr.net/npm/lib-a@1.0.0/": { react: "https://cdn.jsdelivr.net/npm/react@18.3.1/index.js" } });
 });
+
+test("14. build --graph hashes the whole import graph into the map and the lock; --max-files warns when it cuts the walk short", async () => {
+  const dir = await setup(`
+    const fx = {
+      ...registryFixtures,
+      "https://esm.sh/react@19.2.0?target=es2022": 'export * from "/react@19.2.0/es2022/react.mjs";',
+      "https://esm.sh/react@19.2.0/es2022/react.mjs": 'import "./a.mjs";',
+      "https://esm.sh/react@19.2.0/es2022/a.mjs": "export {}",
+    };
+    export default ({ lock }) => createRouter({ "*": esmSh() }, { fetch: fakeFetch(fx), probe: "none", lock });
+  `);
+  const out = [];
+  await main(["build", "react@19.2.0", "--graph"], { cwd: dir, log: (s) => out.push(s) });
+  assert.match(out.at(-1), /\(3 files hashed\)/);
+  const map = JSON.parse(await readFile(join(dir, "importmap.json"), "utf8"));
+  const lock = JSON.parse(await readFile(join(dir, "mport.lock.json"), "utf8"));
+  assert.equal(Object.keys(map.integrity).length, 3);
+  assert.deepEqual(lock.files, map.integrity);
+
+  const cut = [];
+  await main(["build", "react@19.2.0", "--graph", "--max-files", "1", "--relock"], { cwd: dir, log: (s) => cut.push(s) });
+  assert.match(cut[0], /warning: the import graph of https:\/\/esm\.sh\/react@19\.2\.0\?target=es2022 was cut short at maxFiles 1 \(1 file\(s\) not hashed\)/);
+});
