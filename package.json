@@ -81,6 +81,7 @@
     "example:10": "node examples/10-cli-builds-offline-from-a-config.mjs",
     "example:11": "node examples/11-v1-api-races-origins-on-the-router.mjs",
     "example:12": "node examples/12-server-renders-an-import-map-with-preloads.mjs",
+    "example:13": "node examples/13-conflicting-versions-get-scopes.mjs",
     "demo": "deno -A examples/demo.mjs",
     "demo:firefox": "deno -A examples/demo.firefox.mjs",
     "demo:html": "python3 -m http.server 8712"

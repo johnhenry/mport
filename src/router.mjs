@@ -17,6 +17,7 @@ import { valid } from "./semver.mjs";
 import { fallback, HealthRegistry, SkipError, RoutingError, note } from "./strategies.mjs";
 import { custom } from "./providers.mjs";
 import { compileImportMap } from "./importmap.mjs";
+import { planConflicts } from "./conflicts.mjs";
 import { createLock, lockKey } from "./lock.mjs";
 
 export const route = (match, use) => ({ match, use });
@@ -266,9 +267,14 @@ export function createRouter(routes, options = {}) {
     lock,
     resolve,
     import: importModule,
-    /** Resolve many specifiers and compile an import map plus lockfile. */
-    async build(specifiers, { scopes = {}, signal } = {}) {
-      const resolved = await Promise.all(specifiers.map(async (s) => {
+    /**
+     * Resolve many specifiers and compile an import map plus lockfile.
+     * `conflicts`: "error" (default) throws when two specifiers map one key to different URLs;
+     * "scope" keeps the first and scopes the others to the packages that depend on them.
+     */
+    async build(specifiers, { scopes = {}, signal, conflicts = "error" } = {}) {
+      if (conflicts !== "error" && conflicts !== "scope") throw new TypeError(`mport: build option conflicts must be "error" or "scope", got ${JSON.stringify(conflicts)}`);
+      let resolved = await Promise.all(specifiers.map(async (s) => {
         const r = await resolve(s, { signal });
         if (r === null) throw new ResolutionError(`mport: no route for "${s}" (relative, URL, non-package or unmatched specifier)`);
         return r;
@@ -283,9 +289,32 @@ export function createRouter(routes, options = {}) {
           }),
         );
       }
-      return { importMap: compileImportMap(resolved.filter(Boolean), scoped), lock: lock.toJSON() };
+      let report = [];
+      if (conflicts === "scope") {
+        const plan = await planConflicts(resolved, {
+          manifest: registry.manifest?.bind(registry),
+          rootOf: (r) => rootOf(r),
+        });
+        resolved = plan.resolved;
+        report = plan.report;
+        for (const [scope, list] of Object.entries(plan.scopes)) (scoped[scope] ??= []).push(...list);
+        for (const c of report) {
+          try { onEvent?.({ type: "conflict", provider: "build", reason: `${c.key}: kept ${c.kept.url}; ${c.scoped.length} scoped, ${c.unscoped.length} unreachable`, at: now() }); } catch {}
+        }
+      }
+      return { importMap: compileImportMap(resolved, scoped), lock: lock.toJSON(), conflicts: report };
     },
   };
+
+  /** The directory URL of the package a Resolution points into (what an import-map scope is keyed by). */
+  function rootOf(r) {
+    for (const { node } of table) {
+      for (const n of walk(node)) {
+        if (n.kind === "provider" && n.name === r.provider) return n.base({ registry: r.registry, name: r.name, version: r.version, path: "", entry: "" });
+      }
+    }
+    return r.url.replace(/[^/]*$/, "");
+  }
 }
 
 // Registry lookups and import probes are shared/memoized, so they can't take a

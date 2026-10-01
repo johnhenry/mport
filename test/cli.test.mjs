@@ -69,3 +69,20 @@ test("12. a prebuilt router refuses --lock/--relock and never overwrites the loc
   assert.equal(await readFile(join(dir, "mport.lock.json"), "utf8"), lockText, "left untouched");
   assert.equal(JSON.parse(await readFile(join(dir, "importmap.json"), "utf8")).imports.react, "https://esm.sh/react@19.2.0?target=es2022");
 });
+
+test("13. build --conflicts scope (or config.conflicts) scopes conflicting versions instead of failing", async () => {
+  const dir = await setup(`
+    import { jsDelivr } from ${JSON.stringify(new URL("../src/core.mjs", import.meta.url).href)};
+    const fx = {
+      ...registryFixtures,
+      "https://registry.npmjs.org/lib-a": { "dist-tags": { latest: "1.0.0" }, versions: { "1.0.0": {} } },
+      "https://registry.npmjs.org/lib-a/1.0.0": { type: "module", main: "index.js", dependencies: { react: "^18" } },
+    };
+    export default ({ lock }) => ({ routes: { "*": jsDelivr() }, options: { fetch: fakeFetch(fx), probe: "none", lock } });
+  `);
+  const specs = ["react@19.2.0", "react@18.3.1", "lib-a@1.0.0"];
+  await assert.rejects(main(["build", ...specs], { cwd: dir, log() {} }), /conflicting resolutions for "react"/);
+  await main(["build", ...specs, "--conflicts", "scope"], { cwd: dir, log() {} });
+  const map = JSON.parse(await readFile(join(dir, "importmap.json"), "utf8"));
+  assert.deepEqual(map.scopes, { "https://cdn.jsdelivr.net/npm/lib-a@1.0.0/": { react: "https://cdn.jsdelivr.net/npm/react@18.3.1/index.js" } });
+});

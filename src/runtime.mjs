@@ -37,9 +37,9 @@ export function injectModulePreload(importMap, { document = globalThis.document,
   });
 }
 
-/** Resolve `specifiers`, inject the import map, and return { importMap, lock }. */
-export async function startup(router, specifiers, { scopes, document } = {}) {
-  const result = await router.build(specifiers, { scopes });
+/** Resolve `specifiers` (build options such as `scopes` and `conflicts` pass through), inject the import map, and return the build result. */
+export async function startup(router, specifiers, { document, ...buildOptions } = {}) {
+  const result = await router.build(specifiers, buildOptions);
   injectImportMap(result.importMap, { document });
   return result;
 }

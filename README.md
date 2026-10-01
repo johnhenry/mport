@@ -270,6 +270,21 @@ Keys are the specifier as written: a registry prefix appears only if you wrote o
 
 Pass the lockfile back in with `createRouter(routes, { lock })` and the same versions come back without asking the registry again. The same entry files and builds come back too. Passing `{ relock: true }` to `resolve` ignores the lock. The lockfile `build()` returns holds every resolution *this router* has made so far (the lockfile you passed in only pins; entries you no longer build are dropped), so use a fresh router per build.
 
+### Two versions of one package: `conflicts: "scope"`
+
+An import map maps a key to one URL, so `react@18` and `react@19` in one build used to be an error. `build(specifiers, { conflicts: "scope" })` keeps the first listed version in `imports` and reads each other package's registry manifest to scope the right version to the package that depends on it:
+
+```js
+const { importMap, conflicts } = await router.build(
+  ["react@19.2.0", "react@18.3.1", "lib-a@1.0.0"],   // lib-a depends on react ^18
+  { conflicts: "scope" },
+);
+// importMap.imports.react                          → react 19 (first listed)
+// importMap.scopes["…/npm/lib-a@1.0.0/"].react     → react 18
+```
+
+The default stays `"error"`: a silent choice of "which version the page's own code gets" is a decision, not a default. Limits (dependents are the packages in the build, not their transitive dependencies; scopes only affect bare imports, so they change nothing for esm.sh or jsDelivr `+esm`, which already import by URL) are in [docs/api.md](docs/api.md#conflicting-versions-conflicts-scope).
+
 ### CLI
 
 ```bash
@@ -288,7 +303,7 @@ export default {
 };
 ```
 
-Flags: `--config`, `--out importmap.json`, `--lock mport.lock.json`, `--relock`, `--trace`. A function config receives the parsed lockfile (`undefined` with `--relock` or when there is none): `export default ({ lock }) => createRouter(routes, { lock })`. A prebuilt router can't take a lockfile, so `--lock`/`--relock` with one is an error and `build` leaves the lock file alone. Details: [docs/api.md#the-cli](docs/api.md#the-cli).
+Flags: `--config`, `--out importmap.json`, `--lock mport.lock.json`, `--relock`, `--conflicts error|scope`, `--trace`. A function config receives the parsed lockfile (`undefined` with `--relock` or when there is none): `export default ({ lock }) => createRouter(routes, { lock })`. A prebuilt router can't take a lockfile, so `--lock`/`--relock` with one is an error and `build` leaves the lock file alone. Details: [docs/api.md#the-cli](docs/api.md#the-cli).
 
 ## In the browser
 
@@ -350,7 +365,7 @@ Every export, from `@johnhenry/mport` (all of them), `@johnhenry/mport/firefox` 
 | [`createRouter`](docs/api.md#createrouter) | `(routes, options?) → Router` | Build a router. Options: `probe`, `lock`, `resolveVersions`, `circuitBreaker`, `health`, `target`, `capabilities`, `fetch`, `importer`, `registries`, `registry`, `onEvent`, `now`, `allowCommonJS`, `name` |
 | [`router.resolve`](docs/api.md#routerresolve) | `(specifier, options?) → Promise<Resolution \| null>` | Resolve one specifier. Options: `signal`, `exclude`, `build`, `integrity`, `target`, `capabilities`, `relock`, `onEvent` |
 | [`router.import`](docs/api.md#routerimport) | `(specifier, options?) → Promise<module>` | Resolve and import, failing over when the import fails |
-| [`router.build`](docs/api.md#routerbuild) | `(specifiers, { scopes?, signal? }?) → Promise<{ importMap, lock }>` | Resolve many and compile an import map and lockfile |
+| [`router.build`](docs/api.md#routerbuild) | `(specifiers, { scopes?, conflicts?, signal? }?) → Promise<{ importMap, lock, conflicts }>` | Resolve many and compile an import map and lockfile; `conflicts: "scope"` scopes conflicting versions per dependent |
 | `router.health`, `router.lock`, `router.name` | | The router's [`HealthRegistry`](docs/api.md#healthregistry), its in-memory lock, its name |
 | [`route`](docs/api.md#route) | `(match, use) → { match, use }` | One array-form route |
 | [`esmSh`, `jsDelivr`, `unpkg`, `jspm`, `jsr`, `github`, `local`](docs/api.md#built-in-providers) | `(options?) → Provider` | Built-in providers |

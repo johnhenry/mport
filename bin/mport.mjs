@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// mport build   [specifier...] [--config mport.config.mjs] [--out importmap.json] [--lock mport.lock.json] [--relock]
+// mport build   [specifier...] [--config mport.config.mjs] [--out importmap.json] [--lock mport.lock.json] [--relock] [--conflicts error|scope]
 // mport resolve <specifier> [--config mport.config.mjs] [--trace]
 //
 // The config module's default export is one of
@@ -16,7 +16,7 @@ import { createRouter } from "../src/router.mjs";
 import { esmSh, jsDelivr, unpkg } from "../src/providers.mjs";
 
 const USAGE = `usage:
-  mport build [specifier...] [--config file] [--out importmap.json] [--lock mport.lock.json] [--relock]
+  mport build [specifier...] [--config file] [--out importmap.json] [--lock mport.lock.json] [--relock] [--conflicts error|scope]
   mport resolve <specifier> [--config file] [--trace]`;
 
 const exists = (p) => access(p).then(() => true, () => false);
@@ -31,6 +31,7 @@ export async function main(argv = process.argv.slice(2), { log = console.log, cw
       lock: { type: "string", short: "l" },
       relock: { type: "boolean", default: false },
       trace: { type: "boolean", default: false },
+      conflicts: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -66,7 +67,7 @@ export async function main(argv = process.argv.slice(2), { log = console.log, cw
   if (command === "build") {
     const list = specs.length ? specs : config.specifiers ?? [];
     if (!list.length) throw new Error("mport build: no specifiers (pass them or set `specifiers` in the config)");
-    const { importMap, lock: newLock } = await router.build(list, { scopes: config.scopes });
+    const { importMap, lock: newLock } = await router.build(list, { scopes: config.scopes, conflicts: values.conflicts ?? config.conflicts });
     await writeFile(resolvePath(cwd, values.out), JSON.stringify(importMap, null, 2) + "\n");
     const n = Object.keys(importMap.imports).length;
     if (prebuilt) {

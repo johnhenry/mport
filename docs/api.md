@@ -309,7 +309,7 @@ at runtime only works when the page's import map already covers those.
 ### router.build()
 
 ```ts
-router.build(specifiers: string[], options?: { scopes?, signal? }): Promise<{ importMap: ImportMap, lock: Lockfile }>
+router.build(specifiers: string[], options?: { scopes?, signal?, conflicts? }): Promise<{ importMap: ImportMap, lock: Lockfile, conflicts: ConflictReport[] }>
 ```
 
 Resolves every specifier concurrently and compiles an [import map](#import-maps).
@@ -319,11 +319,74 @@ resolved and placed under its scope with the key you gave. A specifier that reso
 `ResolutionError("mport: no route for …")`; nothing is silently dropped. Any other
 rejection from `resolve()` rejects the build.
 
+`conflicts` is `"error"` (the default) or `"scope"`; see [Conflicting versions](#conflicting-versions-conflicts-scope).
+Any other value is a `TypeError`. The result's `conflicts` array holds one
+[`ConflictReport`](#conflicting-versions-conflicts-scope) per conflicting key that `"scope"` handled
+(always empty with `"error"`).
+
 `lock` is `router.lock.toJSON()`: every resolution this router has made itself so far,
 including earlier `resolve()` and `import()` calls, not only this build's specifiers. It
 starts **empty**: entries of the `lock` option are read-only pins, never copied across, so
 specifiers you no longer build are pruned from the written lockfile. Use a fresh router
 per build if the lockfile should contain exactly one build's inputs.
+
+#### Conflicting versions (`conflicts: "scope"`)
+
+An import map maps one key to one URL per scope. If `react@18.3.1` and `react@19.2.0` are
+both requested, the unscoped `imports.react` can hold only one, and the other is reachable
+only from a **scope**. By default `build()` throws (`ResolutionError`, *conflicting
+resolutions for "react"*). With `conflicts: "scope"` it instead:
+
+1. keeps the **first listed** specifier in `imports` (put your app's own version first);
+2. for every other package in the build, reads its registry manifest (`dependencies`,
+   `peerDependencies`, `optionalDependencies`; one `GET <npm>/<name>/<version>` per
+   package, memoized) and looks at the range it declares for the conflicting package;
+3. gives each such dependent the first of the conflicting versions that satisfies its
+   range, *if that is not the unscoped one*, as an entry in `scopes[<dependent's package
+   directory>]`. The directory is the dependent provider's `base()` for that exact
+   version (`https://cdn.jsdelivr.net/npm/lib-a@1.0.0/`, `https://ga.jspm.io/npm:lib-a@1.0.0/`,
+   `https://esm.sh/lib-a@1.0.0/`).
+
+The scope key is a **URL prefix of the importing module**, which is how import maps work:
+for every module whose URL starts with it, the scoped mapping beats the top-level one.
+Each scoped URL's `integrity` is carried into the map like any other. Each conflicting key
+yields a report, also traced as `{ type: "conflict", provider: "build", reason }` through
+`onEvent`:
+
+```ts
+interface ConflictReport {
+  key: string;
+  kept: { specifier: string; url: string };      // owns the unscoped imports entry
+  scoped: Array<{ specifier; url; scope; dependent: "name@version"; range }>;
+  unscoped: Array<{ specifier; url }>;            // versions no package in the build depends on
+}
+```
+
+Why this design rather than a `{ scope }` per specifier: the information that decides which
+dependent needs which version is the dependency graph, and the registry already records it.
+Explicit scopes remain available (`build(specifiers, { scopes })`) and combine with
+`conflicts: "scope"`. They are also the only way to scope something the manifests don't
+tell you about.
+
+**Limits, stated plainly:**
+
+- Dependents are the **npm packages named in this build**, not their transitive
+  dependencies. If `lib-a` imports `lib-a-utils` which imports `react@18`, list
+  `lib-a-utils` in the build too (or add an explicit scope); otherwise `lib-a-utils` sees
+  the unscoped version.
+- Scopes only change what a **bare specifier** inside a file resolves to. Builds that
+  rewrite their dependency imports to absolute URLs (esm.sh, jsDelivr `+esm`) never use
+  the key, so for them the scope is generated but has no effect; the version a module
+  gets is already fixed inside it. Scopes matter for jspm, raw CDNs (jsDelivr, unpkg)
+  and `local()`, whose files keep bare imports.
+- A key conflicting between two **explicit** scoped lists, or two different URLs inside one
+  scope, is still an error.
+- `npm` dependents only; JSR and GitHub packages have no manifest the router reads.
+- A conflicting version nobody depends on (or whose dependents' ranges it doesn't satisfy)
+  ends up in no scope: it is listed under `unscoped` and the map still has no way to reach
+  it. The page's own modules can only ever see the unscoped version.
+- A dependent whose range both the unscoped version and another satisfy keeps the unscoped
+  one. A dependent whose range no listed version satisfies gets nothing.
 
 ### router.health, router.lock, router.name
 
@@ -804,7 +867,8 @@ level and in scopes alike: the hash is of one entry file, not of the directory a
 to **different** URLs (`react@18` and `react@19` both want `"react"`) throw a
 `ResolutionError` naming the key and both URLs, in `imports` and inside each scope alike,
 instead of keeping one silently; the same URL twice is fine. Give the second version its
-own scope (`router.build(specifiers, { scopes })`). For scoped lists, each entry's
+own scope (`router.build(specifiers, { scopes })`), or build with
+[`conflicts: "scope"`](#conflicting-versions-conflicts-scope). For scoped lists, each entry's
 `key` is the key to use inside that scope.
 
 ### mergeImportMaps()
@@ -961,10 +1025,10 @@ Appends a `<link rel="modulepreload">` to `<head>` for each `modulePreloads(map)
 ### startup()
 
 ```ts
-startup(router, specifiers: string[], { scopes?, document? }?): Promise<{ importMap, lock }>
+startup(router, specifiers: string[], { document?, ...buildOptions }?): Promise<BuildResult>
 ```
 
-`router.build(specifiers, { scopes })`, then `injectImportMap(importMap)`. Afterwards plain
+`router.build(specifiers, buildOptions)` (`scopes`, `conflicts`, `signal`, …), then `injectImportMap(importMap)`. Afterwards plain
 `import "react"` works natively, and nothing retries if a mirror goes down later.
 
 ### createImporter()
@@ -999,7 +1063,7 @@ match `20.0.0-rc.1`; `>=20.0.0-rc.0` does). An unparseable range throws `TypeErr
 ## The CLI
 
 ```
-mport build   [specifier...] [--config file] [--out importmap.json] [--lock mport.lock.json] [--relock]
+mport build   [specifier...] [--config file] [--out importmap.json] [--lock mport.lock.json] [--relock] [--conflicts error|scope]
 mport resolve <specifier> [--config file] [--trace] [--lock mport.lock.json] [--relock]
 mport --help
 ```
@@ -1013,6 +1077,7 @@ global `fetch` (Node 18+; the package declares Node >= 26).
 | `--out` | `-o` | `importmap.json` | where `build` writes the import map |
 | `--lock` | `-l` | `mport.lock.json` | the lockfile both commands read (if it exists) and `build` writes. Not for prebuilt-router configs (error) |
 | `--relock` | | `false` | don't read the lockfile (not for prebuilt-router configs: error) |
+| `--conflicts` | | config's `conflicts`, else `error` | `build`: `scope` generates import-map scopes for conflicting versions (see [Conflicting versions](#conflicting-versions-conflicts-scope)) |
 | `--trace` | | `false` | `resolve` prints the trace too |
 | `--help` | `-h` | | print usage |
 
@@ -1026,6 +1091,7 @@ global `fetch` (Node 18+; the package declares Node >= 26).
 | `options` | `{}` | passed to `createRouter`, with `lock` set from `--lock` |
 | `specifiers` | `[]` | what `build` resolves when none are given on the command line |
 | `scopes` | none | passed to `build` |
+| `conflicts` | `"error"` | passed to `build` (the `--conflicts` flag overrides it) |
 
 With no config at all, the default routes are used.
 

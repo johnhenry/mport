@@ -92,10 +92,12 @@ export function createRegistry({
 
     /** { file, esm } for an npm package version (see `entryInfo`). */
     entryInfo(name, version, subpath = "") {
-      return once(`entry:${name}@${version}/${subpath}`, async () => {
-        const pkg = await json(fetch, `${npm}/${encodeNpm(name)}/${version}`);
-        return entryInfo(pkg, subpath);
-      });
+      return once(`entry:${name}@${version}/${subpath}`, async () => entryInfo(await this.manifest(name, version), subpath));
+    },
+
+    /** The package.json the npm registry holds for one exact version (memoized). */
+    manifest(name, version) {
+      return once(`manifest:${name}@${version}`, () => json(fetch, `${npm}/${encodeNpm(name)}/${version}`));
     },
   };
 }

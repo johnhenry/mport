@@ -8,7 +8,7 @@ import mport, {
   HealthRegistry, RoutingError, SkipError, IntegrityError, ResolutionError,
   parseSpecifier, keyOf, isRoutable, createRegistry, entryInfo, entryOf, resolveExports,
   compileImportMap, mergeImportMaps, createLock, lockKey, injectImportMap, startup, createImporter, semver,
-  type Resolution, type TraceEvent, type Lockfile, type ImportMap, type HealthState, type Router,
+  type Resolution, type TraceEvent, type Lockfile, type ImportMap, type HealthState, type Router, type ConflictReport,
 } from "@johnhenry/mport";
 import * as core from "@johnhenry/mport/core";
 import firefoxDefault from "@johnhenry/mport/firefox";
@@ -48,6 +48,11 @@ export async function check(): Promise<void> {
   const { importMap, lock }: { importMap: ImportMap; lock: Lockfile } = await router.build(["react@^19", "lit/"], {
     scopes: { "https://legacy.example.com/": { react: "react@18" } },
   });
+  const scoped = await router.build(["react@19", "react@18", "lib-a@1"], { conflicts: "scope" });
+  const reports: ConflictReport[] = scoped.conflicts;
+  void [reports[0]?.kept.url, reports[0]?.scoped[0]?.scope, reports[0]?.unscoped.length];
+  // @ts-expect-error conflicts is "error" or "scope"
+  await router.build(["react"], { conflicts: "merge" });
   const pinned = createRouter({ "*": esmSh() }, { lock });
   void pinned.lock.get("react@^19")?.version;
   void mergeImportMaps(importMap, compileImportMap([{ key: "a", url: "https://a.test/a.js" }]));

@@ -3,12 +3,15 @@
 
 import { ResolutionError } from "./registry.mjs";
 
+/** The URL a Resolution puts under `key`: a prefix key maps to the directory (`base`), any other to the module. */
+export const mapUrl = (r, key = r.key) => (key.endsWith("/") ? r.base ?? r.url.replace(/[^/]*$/, "") : r.url);
+
 const put = (target, r, where = "imports", key = r.key) => {
-  const url = key.endsWith("/") ? r.base ?? r.url.replace(/[^/]*$/, "") : r.url;
+  const url = mapUrl(r, key);
   if (key in target && target[key] !== url) {
     throw new ResolutionError(
       `mport: conflicting resolutions for "${key}" in ${where}: ${target[key]} and ${url}. ` +
-      `An import map maps a key to one URL; give the other version its own scope (build(specifiers, { scopes })).`,
+      `An import map maps a key to one URL; give the other version its own scope (build(specifiers, { scopes })), or build with { conflicts: "scope" } to scope it to the packages that depend on it.`,
     );
   }
   target[key] = url;

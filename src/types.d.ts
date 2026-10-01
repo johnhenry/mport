@@ -120,7 +120,7 @@ export interface Artifact {
 }
 
 export interface TraceEvent {
-  type: "lookup" | "resolved" | "probe" | "ok" | "selected" | "fail" | "skip" | "aborted";
+  type: "lookup" | "resolved" | "probe" | "ok" | "selected" | "fail" | "skip" | "aborted" | "conflict";
   /** for "resolved": the exact version the registry lookup chose */
   version?: string;
   /** "import": router.import() failed to load a resolved URL; "integrity": verified() rejected it */
@@ -226,6 +226,8 @@ export interface RegistryClient {
   version(parsed: Pick<ParsedSpecifier, "registry" | "name" | "range">): Promise<string | undefined>;
   /** entry file for an npm package version (and optional sub-path) */
   entry(name: string, version: string, subpath?: string): Promise<string>;
+  /** the package.json of one exact npm version (used by `conflicts: "scope"`; optional for custom clients) */
+  manifest?(name: string, version: string): Promise<Record<string, any>>;
   /** entry file plus whether it is an ES module */
   entryInfo(name: string, version: string, subpath?: string): Promise<{ file: string; esm: boolean; hasExports: boolean }>;
 }
@@ -285,12 +287,31 @@ export interface BuildOptions {
   /** scope URL → { import-map key: specifier } */
   scopes?: Record<string, Record<string, string>>;
   signal?: AbortSignal;
+  /**
+   * What to do when two specifiers map one import-map key to different URLs. "error" (default)
+   * throws a ResolutionError; "scope" keeps the first listed in `imports` and generates `scopes`
+   * so each dependent package gets the version its manifest asks for.
+   */
+  conflicts?: "error" | "scope";
+}
+
+/** What `conflicts: "scope"` did about one conflicting import-map key. */
+export interface ConflictReport {
+  key: string;
+  /** the specifier that owns the unscoped `imports` entry */
+  kept: { specifier: string; url: string };
+  /** scopes generated: the dependent's package directory now maps `key` to `url` */
+  scoped: Array<{ specifier: string; url: string; scope: string; dependent: string; range: string }>;
+  /** versions no package in the build depends on: in no scope, so nothing reaches them */
+  unscoped: Array<{ specifier: string; url: string }>;
 }
 
 export interface BuildResult {
   importMap: ImportMap;
   /** every resolution this router has made so far, not only this build's */
   lock: Lockfile;
+  /** one entry per conflicting key resolved by `conflicts: "scope"` (empty otherwise) */
+  conflicts: ConflictReport[];
 }
 
 export interface Router {
@@ -422,7 +443,7 @@ export function lockKey(parsed: ParsedSpecifier): string;
 export function injectImportMap(map: ImportMap, o?: { document?: Document }): HTMLScriptElement;
 /** Add `<link rel="modulepreload">` elements for the map's modules to `<head>`; returns them. */
 export function injectModulePreload(map: ImportMap, o?: { document?: Document; crossorigin?: string }): HTMLLinkElement[];
-export function startup(router: Router, specifiers: string[], o?: { scopes?: Record<string, Record<string, string>>; document?: Document }): Promise<BuildResult>;
+export function startup(router: Router, specifiers: string[], o?: BuildOptions & { document?: Document }): Promise<BuildResult>;
 export function createImporter(router: Router): <T = any>(specifier: string | SpecifierObject, options?: ResolveOptions) => Promise<T>;
 
 // ---------------------------------------------------------------- semver
