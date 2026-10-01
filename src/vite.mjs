@@ -1,3 +1,4 @@
+// @ts-self-types="./vite.d.ts"
 // Vite plugin: bare imports go through a mport router (production builds).
 //
 //   import mport from "@johnhenry/mport/vite";

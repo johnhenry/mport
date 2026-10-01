@@ -1,3 +1,4 @@
+// @ts-self-types="./node.d.ts"
 // Node-only entry point (`@johnhenry/mport/node`). The core is browser code with no
 // imports from node:; anything that touches the disk lives here instead.
 import { readFile } from "node:fs/promises";

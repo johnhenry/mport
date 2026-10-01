@@ -2,3 +2,5 @@ node_modules/
 *.tgz
 test-results/
 playwright-report/
+size-report.json
+bench-results.json

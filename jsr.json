@@ -1,0 +1,16 @@
+{
+  "name": "@johnhenry/mport",
+  "version": "0.0.0",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./firefox": "./src/firefox.mjs",
+    "./core": "./src/core.mjs",
+    "./node": "./src/node.mjs",
+    "./vite": "./src/vite.mjs",
+    "./rollup": "./src/rollup.mjs"
+  },
+  "publish": {
+    "include": ["src/**/*.mjs", "src/**/*.d.ts", "README.md", "LICENSE.md", "CHANGELOG.md", "jsr.json"]
+  }
+}

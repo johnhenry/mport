@@ -1,3 +1,4 @@
+// @ts-self-types="./types.d.ts"
 import { createV1 } from "./v1.mjs";
 
 const { MPort, MPortURL, mport } = createV1({

@@ -1,4 +1,4 @@
-// Benchmarks (non-gating): `npm run bench` [-- --json].
+// Benchmarks (non-gating): `npm run bench` [-- --json] [-- --out file.json].
 //
 // All against a fake fetch, so these measure mport's own work (routing, registry
 // parsing, hashing, import-map compilation), not network speed. A real build is
@@ -89,6 +89,12 @@ await series("cold build, 20 ms latency per request", 3, () => make({}, 20).buil
   record("parseImports", mb / (median(runs) / 1000), "MB/s", { sizeMB: +mb.toFixed(2) });
 }
 
+const outAt = process.argv.indexOf("--out");
+if (outAt !== -1) {
+  // `--out <file>`: the same JSON `--json` prints, written to a file (CI keeps it as an artifact; bench/compare.mjs reads it).
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(process.argv[outAt + 1] ?? "bench-results.json", JSON.stringify({ node: process.version, platform: `${process.platform}-${process.arch}`, results }, null, 2) + "\n");
+}
 if (process.argv.includes("--json")) {
   console.log(JSON.stringify({ node: process.version, platform: `${process.platform}-${process.arch}`, results }, null, 2));
 } else {

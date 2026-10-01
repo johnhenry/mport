@@ -1,3 +1,4 @@
+// @ts-self-types="./rollup.d.ts"
 // Rollup plugin: bare imports go through a mport router.
 //
 //   import mport from "@johnhenry/mport/rollup";

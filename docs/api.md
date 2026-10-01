@@ -609,6 +609,11 @@ origin by default), plus: a module reached only through a *computed* `import()`,
 root you ship, since each entry point's graph is separate. The manifest proves the files you hashed are the files
 the browser gets; it does not say they are safe.
 
+**Pinning JavaScript imports from HTML modules.** html-modules' `<html-import src="x.js" integrity>` is checked against the
+page's import map `integrity` entry for that URL (the browser enforces it for `import()`; html-modules refuses a missing or
+different entry and points back here). `build({ graph })` and `build({ html })` write exactly those entries, so the import map
+they compile is the supported way to satisfy it.
+
 **Limits:**
 
 - *The parser is a tokenizer, not a JavaScript parser.* It skips comments, strings,

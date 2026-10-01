@@ -18,11 +18,13 @@ examples and the CLI. `docs/api.md` is the behavioural contract: change it with 
 4. `npm run examples` — the numbered examples are self-verifying and offline.
 5. `npm pack --dry-run` — read the file list: `src/`, `bin/`, `docs/`, `CHANGELOG.md`,
    `README.md`, `LICENSE.md`, `package.json`, nothing else.
-6. A genuinely fresh clone:
+6. `npm run size` — the size budgets (below); and, when you touched an entry point, `exports`, a `.d.ts` or `jsr.json`,
+   `npm run jsr-dry-run` (JSR, below).
+7. A genuinely fresh clone:
    `git clone . /tmp/mport-verifyN && cd $_ && npm ci && npm test && npm run examples`.
-7. Commit, push, close the issue with a comment naming the commit SHA.
+8. Commit, push, close the issue with a comment naming the commit SHA.
 
-CI (`.github/workflows/ci.yml`, the reusable family gate) runs steps 1-5 on Node 26, with `typecheck`, `test`, `examples`, `pack` in this order; match it locally.
+CI (`.github/workflows/ci.yml`, the reusable family gate) runs steps 1-5 on Node 26, with `typecheck`, `test`, `examples`, `pack` in this order; match it locally. Step 6 is the local `size` and `jsr-dry-run` jobs.
 Node 24 also runs everything today, but 26 is the floor that is tested.
 
 ## Browser tests and the type-check
@@ -34,7 +36,47 @@ import map added after a module has loaded, so `startup()` can't work there (doc
 asserted by the "late import maps" spec). `tsc` finds `@types/*` in parent directories, so run the
 type-check in a fresh clone (step 6) before trusting a pass that needs an ambient type.
 
+## Size budgets and the bench
+
+`npm run size` (`scripts/size.mjs`, gating in the CI `size` job) measures the packed tarball (`npm pack --dry-run --json`: compressed
+and unpacked bytes) and the **gzip size of every entry point of `exports`**, counted as the entry file plus everything it reaches
+through relative static imports (what a no-bundler page downloads). The limits are `package.json` `sizeBudget`
+(`tarball`, `unpacked`, `entries: { "<export key>": <gzip bytes> }`), set at today's measurement plus about 10%. It exits 1 when a
+measure is over its budget, when an export has no budget, or when a budget names an export that is gone, and `-- --json <file>`
+writes the report (CI uploads it as the `size-report` artifact). Raise a limit deliberately, in the commit that grows the package,
+with the reason in the message; never to turn a red build green. A new entry point needs its `sizeBudget.entries` row.
+
+`npm run bench` (non-gating, the CI `bench` job) prints the numbers; `-- --out <file>` also writes them as JSON. CI stores that file
+as the `bench-results` artifact and runs `node bench/compare.mjs bench-results.json` against the committed
+`bench/baseline.json`: a measure more than 3x worse (lower-is-better for ms, higher-is-better for per-second) prints a `::warning::`
+annotation. It never fails the build (runners differ). Refresh the baseline on purpose, ideally from a CI run's artifact
+(`gh run download <id> -n bench-results`, then copy it to `bench/baseline.json`): `npm run bench -- --out bench/baseline.json`
+locally records this machine's numbers instead.
+
+## JSR (prepared, not published)
+
+`jsr.json` names `@johnhenry/mport` at the package version, exports the same entry points as `package.json` (minus
+`./package.json`), and publishes `src/**/*.mjs`, `src/**/*.d.ts`, README, LICENSE, CHANGELOG. JSR needs types for a JavaScript
+entry point, so each entry `.mjs` starts with `// @ts-self-types="./<its>.d.ts"` (the `types` of that export).
+`test/jsr.test.mjs` fails when `jsr.json` drifts from `package.json` (name, version, exports, the self-types comment), so a
+version bump touches both. `npm run jsr-dry-run` (`npx jsr@0.14.3 publish --dry-run --allow-dirty`) must say `Success Dry run
+complete`; the CI `jsr-dry-run` job runs it. Its `unanalyzable-dynamic-import` / `import.meta.resolve` warnings are expected: the
+injected `import(url)` importers and the optional-peer import in `graph.mjs` are dynamic by design.
+**Never run a real `jsr publish` from here.** Creating the `@johnhenry/mport` package on jsr.io is a **manual browser step for
+the owner** (JSR has no API or CLI for creating a scope or package; sign in at https://jsr.io/new as `johnhenry`); see
+`~/Projects/@johnhenry/ecosystem/jsr-packages/README.md`. After it exists, publishing from CI uses GitHub OIDC (no token).
+
 ## Repo-specific gotchas
+
+- **`@johnhenry/html-modules` is an optional peer and a pinned git devDependency.** `htmlGraph()` / `build({ html })` import it on
+  demand for `scanHTMLModule`. It is unpublished, so the devDependency is `git+https://github.com/johnhenry/html-modules.git#<sha>`
+  (the tests need the real scanner): `npm install` rewrites the lockfile's `resolved` to `git+ssh://`, which CI cannot clone, so
+  after any `npm install` change it back to `git+https` (leave the `integrity` npm wrote). To move the pin, edit `package.json` and
+  the lockfile, install, fix `resolved`. Once it is on npm, replace the git pin with a normal range.
+- **An HTML graph is walked with html-modules' own reader.** What counts as an import is whatever `scanHTMLModule` records
+  (comments and `<template>` content do not count; `<html-import-settings base>` rebases the module's imports and re-exports),
+  so mport never re-implements it with a regex. The manifest is `{ [absolute url]: "sha384-…" }`, the shape of an import map's
+  `integrity`; do not invent a second format.
 
 - **Raw file CDNs cannot serve CommonJS, and fixtures must say which format they are.**
   jsDelivr/unpkg/jspm/`local()` skip a package whose entry `entryInfo()` judges CommonJS
@@ -84,7 +126,7 @@ A change is done when all of the following hold, not just when tests pass:
 
 CI (`.github/workflows/ci.yml`) and publish (`publish.yml`) call the family's reusable workflows
 (`johnhenry/workflows/.github/workflows/{ci,npm-publish}.yml@v1`). Local to this repo and
-not expressible there: the `browser` matrix (chromium/firefox/webkit) and the non-gating `bench`
+not expressible there: the `browser` matrix (chromium/firefox/webkit), the gating `size` and `jsr-dry-run` jobs and the non-gating `bench`
 in ci.yml. `publish.yml` folds the browser suite into its `gate-commands` (installs all three
 engines, runs `npm run test:browser`), keeps `id-token: write` on the caller job and
 `secrets: inherit`, and triggers on `release: published`, `workflow_dispatch` and a redundant

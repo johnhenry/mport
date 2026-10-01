@@ -1,3 +1,4 @@
+// @ts-self-types="./types.d.ts"
 // Firefox entry point. Older SpiderMonkey rejects any two-argument import()
 // at parse time, so this file (and everything it imports) uses only the
 // one-argument form. package.json files are fetched instead of imported, so

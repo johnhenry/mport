@@ -1,3 +1,4 @@
+// @ts-self-types="./core.d.ts"
 // Everything in mport v2 except the default-export importer, shared by the
 // standard and Firefox entry points.
 export { createRouter, route } from "./router.mjs";

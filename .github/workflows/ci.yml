@@ -54,7 +54,41 @@ jobs:
           path: test-results/
           retention-days: 7
 
-  # Numbers, not a gate: a slow runner must not fail the build. Output is in the job log.
+  # Size budgets (gating): the packed tarball and the gzip size of every entry point against package.json's
+  # "sizeBudget" (scripts/size.mjs). The report is kept as an artifact so a failing run shows the numbers.
+  size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm run size -- --json size-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: size-report
+          path: size-report.json
+          retention-days: 30
+
+  # JSR readiness (gating, nothing is published): `jsr publish --dry-run` checks jsr.json (name, version, exports mirroring
+  # package.json) and the public API's types (each entry carries a `@ts-self-types` comment pointing at its .d.ts).
+  # Creating the package on jsr.io is a manual step for the owner (AGENTS.md, "JSR").
+  jsr-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm run jsr-dry-run
+
+  # Numbers, not a gate: a slow runner must not fail the build. The run is stored as an artifact and compared with
+  # the committed bench/baseline.json at a generous factor (3x); a regression is a warning annotation, never a failure.
   bench:
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -65,4 +99,11 @@ jobs:
           node-version: 26
           cache: npm
       - run: npm ci
-      - run: npm run bench
+      - run: npm run bench -- --out bench-results.json
+      - run: node bench/compare.mjs bench-results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-results
+          path: bench-results.json
+          retention-days: 30

@@ -106,7 +106,9 @@
     "example:21": "node examples/21-integrity-manifest-for-an-html-modules-graph.mjs",
     "demo": "deno -A examples/demo.mjs",
     "demo:firefox": "deno -A examples/demo.firefox.mjs",
-    "demo:html": "python3 -m http.server 8712"
+    "demo:html": "python3 -m http.server 8712",
+    "size": "node scripts/size.mjs",
+    "jsr-dry-run": "npx --yes jsr@0.14.3 publish --dry-run --allow-dirty"
   },
   "devDependencies": {
     "@johnhenry/html-modules": "git+https://github.com/johnhenry/html-modules.git#4558a7a735d34fa5ce9f5540fcdfccb6a2125056",
@@ -124,6 +126,18 @@
   "peerDependenciesMeta": {
     "@johnhenry/html-modules": {
       "optional": true
+    }
+  },
+  "sizeBudget": {
+    "tarball": 125000,
+    "unpacked": 380000,
+    "entries": {
+      ".": 36000,
+      "./firefox": 36000,
+      "./core": 36000,
+      "./node": 7000,
+      "./vite": 11800,
+      "./rollup": 11400
     }
   }
 }
