@@ -66,6 +66,55 @@ Nothing more will be published as `mport`. Install `@johnhenry/mport`.
   through to the range parser, whose `TypeError` every provider retried, ending in a
   `RoutingError` of `TypeError`s. Fixed in b70dabf.
 
+### Conflicting versions, whole-graph integrity, lockfile upkeep, bundler plugins, browser CI
+
+All additive; the one behaviour that changed is that `startup()` can now reject (below).
+
+- **`build(specifiers, { conflicts: "scope" })` generates import-map scopes for conflicting
+  versions.** Two specifiers that map one key to different URLs still throw by default
+  (`conflicts: "error"`); with `"scope"` the first listed keeps `imports` and each package in
+  the build whose registry manifest depends on another version gets a scope keyed by its own
+  directory. The result gains `conflicts`, a report of what was scoped and which versions no
+  package reaches; `--conflicts scope` and `config.conflicts` in the CLI. Dependents are the
+  packages named in the build, not their transitive dependencies, and a scope only changes
+  bare imports (esm.sh and jsDelivr `+esm` already import by URL): the limits are in
+  docs/api.md. Real engines honour the generated scopes (browser tests). In f167c83.
+- **`build(specifiers, { graph })` records integrity for every file of each module's static
+  import graph.** `verified()` hashes the entry file only, which on esm.sh is a stub; `graph`
+  fetches each module, parses its `import`/`export … from` specifiers (`parseImports()`, a
+  dependency-free tokenizer that handles minified output), follows same-origin URLs and puts
+  every hash in the import map's `integrity` and the lockfile's new top-level `files` map. A
+  later build refuses a file whose bytes changed. Bounded by `maxFiles` (500) and `maxDepth`
+  (20); hitting a bound is a `truncated` trace event and `result.graph.truncated`, and the CLI
+  warns. `--graph`, `--max-files`, `--max-depth`. In 9a376f7.
+- **`mport outdated` and `mport update [name…]`, both with `--json`.** `outdated` lists locked
+  packages whose range allows a newer version (`wanted`) or that trail the `latest` tag;
+  `update` re-resolves the named entries (or all) within their ranges and rewrites the
+  lockfile, never the import map. New: `outdated()`, `pickVersion()`, `registry.info()`,
+  `registry.manifest()`, `router.registry`. Registry metadata is now fetched once per package
+  however many ranges ask. In 4e39688.
+- **Bundler plugins: `@johnhenry/mport/vite` and `@johnhenry/mport/rollup`.** Bare imports go
+  through a router: `mode: "external"` emits the CDN URL, `mode: "importmap"` keeps the import
+  bare and injects the map into `index.html` (Vite) or emits `importmap.json` (Rollup), with
+  `build: { conflicts, graph }` passed through. `vite` and `rollup` are dev dependencies only,
+  used by the real-build tests (Rollup 4, Vite 8). In 65ff684.
+- **The types cover all of it** (`ConflictReport`, `GraphOptions`, `GraphReport`,
+  `OutdatedRow`, the plugin entry points), and the type-check compiles a usage file against
+  them, including that the real `vite` and `rollup` `Plugin` types accept ours. It now needs
+  `@types/node` as a dev dependency; a parent directory's `node_modules` had hidden its
+  absence locally. In 2f1ba9f and 6748da5.
+- **The browser runtime is tested on Chromium, Firefox and WebKit** (Playwright, a local
+  static server, every CDN stubbed with `page.route`; one CI job per engine), and `npm run
+  bench` measures cold builds and resolution throughput (non-gating; numbers in the README).
+  In 2f1ba9f.
+- **`startup()` rejects when the engine ignored the import map it injected.** The browser tests
+  found that Firefox (155) ignores an import map added after any module has loaded ("Import maps
+  are not allowed after a module load or preload has started"), so `startup()` and
+  `injectImportMap()` never worked there; bare imports failed later with a confusing
+  `TypeError`. `startup()` now asks the engine (`import.meta.resolve`) and rejects with an
+  error carrying the build result. `examples/app.html` says so. Chromium and WebKit are
+  unaffected, and `createImporter()` or a map in the HTML works everywhere. In 7b6ba06 and ca8f0e3.
+
 ### Audit fixes (breaking changes, since 0.0.0 is unreleased)
 
 - **The circuit breaker trips for a mirror that passes the probe but fails to import.**
