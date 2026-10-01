@@ -983,7 +983,7 @@ people write in import specifiers.
 
 | Function | Meaning |
 |---|---|
-| `parse(v)` | `{ major, minor, patch, pre: string[] }` or `null`; a leading `v` and `+build` metadata are accepted |
+| `parse(v)` | `{ major, minor, patch, pre: string[] }` or `null`; a leading `v` and `+build` metadata are accepted; the prerelease is everything after the first `-` (`1.0.0-rc-1` → `pre: ["rc-1"]`) |
 | `valid(v)` | `parse(v) !== null` |
 | `compare(a, b)` | `-1`, `0` or `1`; prereleases sort before their release, numeric identifiers numerically |
 | `satisfies(version, range)` | whether `version` is in `range` |
