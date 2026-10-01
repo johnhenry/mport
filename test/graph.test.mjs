@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createRouter, esmSh, verified, sri, parseImports } from "../src/core.mjs";
+import { createRouter, esmSh, provider, verified, sri, parseImports } from "../src/core.mjs";
 import { fakeFetch, registryFixtures } from "./helpers.mjs";
 
 const ENTRY = "https://esm.sh/react@19.2.0?target=es2022";
@@ -127,4 +127,23 @@ test("graph: prefix specifiers have no module to walk and are left out", async (
   const { importMap, graph: g } = await router.build(["lit/"], { graph: true });
   assert.equal(importMap.integrity, undefined);
   assert.equal(g.files, 0);
+});
+
+test("graph: a module mapped to an origin-relative URL (local()-style) is reported as skipped, not a TypeError", async () => {
+  const log = [];
+  const fetch = fakeFetch({ ...registryFixtures, ...graph() }, { log });
+  const mine = provider({ name: "mine", needsVersion: false, url: (a) => `/vendor/${a.name}/index.js` });
+  const router = createRouter({ "app-lib": mine, "*": esmSh() }, { fetch, probe: "none" });
+  const { importMap, lock, graph: g } = await router.build(["app-lib", "react@19.2.0"], { graph: true });
+  assert.equal(importMap.imports["app-lib"], "/vendor/app-lib/index.js");
+  assert.equal(importMap.integrity["/vendor/app-lib/index.js"], undefined, "no hash for what was not fetched");
+  assert.equal(Object.keys(importMap.integrity).length, 4, "the CDN package is still hashed in full");
+  assert.deepEqual(g.skipped.map((s) => [s.url, s.from]), [
+    ["/vendor/app-lib/index.js", "app-lib"],
+    ["https://other.example/x.js", "https://esm.sh/react@19.2.0/es2022/react.mjs"], // the react fixture's other-origin import
+  ]);
+  assert.match(g.skipped[0].reason, /not an absolute http\(s\) URL/);
+  assert.equal(g.files, 4);
+  assert.equal(Object.keys(lock.files).length, 4);
+  assert.equal(log.some((l) => l.url.includes("/vendor/")), false, "nothing was fetched for it");
 });

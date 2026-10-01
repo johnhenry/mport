@@ -324,11 +324,18 @@ export function createRouter(routes, options = {}) {
 
   // Walk each root's import graph, hash every file, check against the lockfile's recorded
   // hashes, and write the new ones into the router's lock (and each root's `integrity`).
-  async function lockGraph(roots, options, signal) {
+  async function lockGraph(allRoots, options, signal) {
     const emit = (root, event) => {
       const e = { provider: root.provider, ...event, at: now() };
       try { onEvent?.(e); } catch {}
     };
+    // A provider such as local() maps to an origin-relative URL ("/node_modules/x/index.js"):
+    // there is nothing to fetch it from at build time, so it is reported, not walked.
+    const fetchable = (r) => { try { const u = new URL(r.url); return u.protocol === "https:" || u.protocol === "http:"; } catch { return false; } };
+    const roots = allRoots.filter(fetchable);
+    const notFetched = allRoots.filter((r) => !fetchable(r)).map((r) => ({
+      url: r.url, from: r.specifier, reason: "not an absolute http(s) URL, so it was not fetched and has no integrity",
+    }));
     const { files, truncated, bare, skipped } = await walkGraph(roots, {
       ...options,
       fetch,
@@ -348,7 +355,7 @@ export function createRouter(routes, options = {}) {
       const rec = lock.get(key);
       if (rec) lock.set(key, { ...rec, integrity: entry });
     }
-    return { files: Object.fromEntries(files), report: { files: files.size, truncated, bare: [...bare].sort(), skipped } };
+    return { files: Object.fromEntries(files), report: { files: files.size, truncated, bare: [...bare].sort(), skipped: [...notFetched, ...skipped] } };
   }
 
   /** The directory URL of the package a Resolution points into (what an import-map scope is keyed by). */

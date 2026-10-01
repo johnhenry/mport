@@ -432,6 +432,9 @@ error in CI, or raise the bound.
 found inside files (raw CDN files import their dependencies by name, so they depend on
 your import map; they are **not** followed), `skipped` the imports left alone (other
 origins, non-HTTP schemes).
+A module that a provider maps to an origin-relative URL (`local()`: `/node_modules/…`) has nothing to be fetched
+from at build time: it is left out of the walk, listed in `skipped` (`{ url, from: <its specifier>, reason }`) and gets no
+`integrity`, so one `build({ graph: true })` can mix local and CDN packages. (It used to throw `TypeError: Invalid URL`.)
 
 **Limits:**
 
