@@ -23,16 +23,15 @@ const setup = async (context, page, state) => {
 };
 
 // Run module code in the page (so it sees the import map installed so far) and return what it
-// passes to `done(value)`. A module that fails to load rejects.
+// passes to `done(value)`; an exception (a bare import that doesn't resolve, say) is
+// returned as { error }. Imports are dynamic because not every engine fires an error event
+// on a module script whose static import fails.
 const runModule = (page, code) =>
-  page.evaluate((code) => new Promise((resolve, reject) => {
+  page.evaluate((code) => new Promise((resolve) => {
     window.__done = resolve;
     const s = document.createElement("script");
     s.type = "module";
-    s.onerror = () => reject(new Error("module script failed to load"));
-    // static imports must stay at the top level of the module
-    const imports = code.split("\n").filter((l) => /^import /.test(l)).join("\n");
-    s.textContent = `${imports}\nconst done = (v) => window.__done(v);\ntry { ${code.replace(/^import .*$/gm, "")} } catch (e) { done({ error: String(e) }); }`;
+    s.textContent = `const done = (v) => window.__done(v);\ntry {\n${code}\n} catch (e) { done({ error: String(e) }); }`;
     document.body.append(s);
   }), code);
 
@@ -46,9 +45,9 @@ test("injectImportMap puts a standard import map ahead of the module scripts", a
   expect(info.type).toBe("importmap");
   expect(JSON.parse(info.text).imports.demo).toBe("https://esm.sh/lit@3.3.1?target=es2022");
   expect(info.before).toBe(true);
-  const imported = runModule(page, `import demo from "demo";\ndone(demo);`);
-  if (acceptsLateMaps(browserName)) expect(await imported).toBe("stub:lit");
-  else await expect(imported).rejects.toThrow("failed to load");
+  const imported = await runModule(page, `done((await import("demo")).default);`);
+  if (acceptsLateMaps(browserName)) expect(imported).toBe("stub:lit");
+  else expect(imported.error).toMatch(/demo/);
 });
 
 test("late import maps: Chromium and WebKit take one after a module has loaded, Firefox does not", async ({ page, context, browserName }) => {
@@ -56,7 +55,7 @@ test("late import maps: Chromium and WebKit take one after a module has loaded, 
   const warnings = [];
   page.on("console", (m) => warnings.push(m.text()));
   await page.evaluate(() => window.mport.injectImportMap({ imports: { demo: "https://esm.sh/lit@3.3.1?target=es2022" } }));
-  const accepted = await runModule(page, `import demo from "demo";\ndone(demo);`).then((v) => v === "stub:lit", () => false);
+  const accepted = (await runModule(page, `done((await import("demo")).default);`)) === "stub:lit";
   test.info().annotations.push({ type: "late import map", description: accepted ? "accepted" : "ignored" });
   expect(accepted).toBe(acceptsLateMaps(browserName));
   if (!accepted) expect(warnings.join("\n")).toMatch(/Import maps are not allowed after a module load/);
@@ -80,7 +79,7 @@ test("startup() resolves and injects the import map; where the engine ignores a 
   expect(await page.evaluate(() => !!document.querySelector('script[type="importmap"]'))).toBe(true);
   if (acceptsLateMaps(browserName)) {
     expect(result.error).toBeUndefined();
-    expect(await runModule(page, `import lit from "lit";\nimport { nanoid } from "nanoid";\ndone([lit, nanoid(8)]);`)).toEqual(["stub:lit", "stubbed-"]);
+    expect(await runModule(page, `const lit = (await import("lit")).default;\nconst { nanoid } = await import("nanoid");\ndone([lit, nanoid(8)]);`)).toEqual(["stub:lit", "stubbed-"]);
   } else {
     expect(result.error).toMatch(/ignored the import map startup\(\) injected.*renderImportMap\(\)/);
   }
