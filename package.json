@@ -1,6 +1,6 @@
 {
   "name": "@johnhenry/mport",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Route JavaScript imports across any number of CDNs: deterministic resolution, adaptive transport (fallback, race, weighted, health-aware), compiled to standard import maps.",
   "homepage": "https://opensource.johnhenry.me/mport/",
   "repository": {
