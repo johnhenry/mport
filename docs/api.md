@@ -1698,7 +1698,16 @@ MPortURL(...origins: string[]): (input, importOptions?) => Promise<[module, url,
 | `cacheKey` | `string` | `"mport-cache"` | the `localStorage` key (one JSON object of input → URL) |
 
 Passing only strings (`MPort("a.cdn/", "b.cdn/")`) is the same as `{ cdns: [...] }`.
-`importOptions` is passed to `import(url, importOptions)` (the Firefox entry ignores it).
+`importOptions` chooses the import attributes of every `import()` the call makes (the Firefox
+entry ignores it). The standard entry passes three forms: none (`undefined`, `{}`,
+`{ with: {} }`), `{ with: { type: "json" } }` and `{ with: { type: "css" } }`; other keys of
+`importOptions` are ignored, as `import()` ignores them. Each form is a literal
+`import(url, { with: { type: "…" } })` in the source, so bundlers can analyse the package
+(a variable `import(url, importOptions)` made Rollup, and so Vite 7 and older, warn on every
+build). Any other attributes (another `type`, another key, a non-string value, a `with` that
+is not an object) reject the call with a `TypeError` before anything is imported or raced,
+instead of being handed to the host. For other attributes, use
+`createRouter({ importer })` with your own `importer`.
 
 **Input**: `"name@version/path"` or `{ name, version, path }`. With no version, v1 uses
 `latest` (it does not resolve ranges; the CDN does). Scoped names work.
@@ -1734,8 +1743,8 @@ loads contains a two-argument `import()`, which older SpiderMonkey rejects at pa
 
 ### Differences from 1.x
 
-Nothing that 1.x exported has been removed. Behaviour changes, all bug fixes, plus one
-addition:
+Nothing that 1.x exported has been removed. Behaviour changes, all bug fixes apart from the
+narrower `importOptions`, plus one addition:
 
 | 1.x | Now |
 |---|---|
@@ -1747,6 +1756,7 @@ addition:
 | path-less imports used `main` | `exports` → `module` → `main`, preferring ESM; this can change which file loads for packages whose `main` is CommonJS |
 | `MPortURL` resolved to `[module, url]` | `[module, url, info]`; two-element destructuring is unaffected |
 | the 1.0.0 tarball lacked `config.mjs` and `race-which.mjs` | the package ships all of `src/` |
+| `importOptions` went to `import(url, importOptions)` as it was | none, `{ with: { type: "json" } }` or `{ with: { type: "css" } }`; any other attributes reject with a `TypeError` (since 0.0.1, #5) |
 | the package was `mport` | it is `@johnhenry/mport`, restarting at 0.0.0; the router API ([createRouter](#createrouter) and everything above) is new |
 
 The default race still mixes builds (raw jsDelivr/unpkg files against jspm's transformed

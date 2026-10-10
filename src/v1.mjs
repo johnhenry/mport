@@ -1,6 +1,9 @@
 // The mport 1.x API, implemented on the v2 router: a runtime race between CDN
 // origins, probing by importing. The import functions are injected so the
 // Firefox entry point never contains two-argument import() syntax.
+// `importerFor(importOptions)` returns the `(url) => import` function for one
+// call (and may throw for options it cannot pass on, before anything loads);
+// `importer(url, importOptions)` is the simpler form, used by tests.
 
 import { parseSpecifier } from "./specifier.mjs";
 import { createRouter } from "./router.mjs";
@@ -16,7 +19,7 @@ function options(args) {
   return args[0] ?? {};
 }
 
-export function createV1({ importer, jsonImporter }) {
+export function createV1({ importer, importerFor = (o) => (url) => importer(url, o), jsonImporter }) {
   const MPortURL = (...args) => {
     const { cdns = [], cacheKey = DEFAULT_CACHE_KEY, useCache } = options(args);
     const list = (cdns.length ? cdns : DEFAULT_ORIGINS).map((o) => (typeof o === "string" ? { path: o } : o));
@@ -42,7 +45,7 @@ export function createV1({ importer, jsonImporter }) {
     };
 
     return async (input, importOptions) => {
-      const load = (url) => importer(url, importOptions);
+      const load = importerFor(importOptions);
       const cacheName = typeof input === "object" ? JSON.stringify(input) : input;
       const cached = readCache(cacheName);
       if (cached) return [await load(cached), cached, { url: cached, cached: true, trace: [] }];

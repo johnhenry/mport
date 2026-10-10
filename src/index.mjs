@@ -1,10 +1,8 @@
 // @ts-self-types="./types.d.ts"
 import { createV1 } from "./v1.mjs";
+import { importerFor, json } from "./v1-importer.mjs";
 
-const { MPort, MPortURL, mport } = createV1({
-  importer: (url, options) => (options === undefined ? import(url) : import(url, options)),
-  jsonImporter: (url) => import(url, { with: { type: "json" } }),
-});
+const { MPort, MPortURL, mport } = createV1({ importerFor, jsonImporter: json });
 
 export * from "./core.mjs";
 export { MPort, MPortURL, mport };

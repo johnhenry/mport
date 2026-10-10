@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createV1 } from "../src/v1.mjs";
+import { importerFor } from "../src/v1-importer.mjs";
 
 // importer that serves some URLs and fails others, with optional latency
 function fakeImporter({ serve = () => true, delay = () => 0 } = {}) {
@@ -66,6 +67,30 @@ test("import options are forwarded to import()", async () => {
   const { MPortURL } = createV1({ importer, jsonImporter: jsonFrom({}) });
   await MPortURL()("x@1/y.json", { with: { type: "json" } });
   assert.ok(importer.calls.every((c) => c.options?.with?.type === "json"));
+});
+
+test("the standard entry maps import options onto literal attributes (#5)", async () => {
+  const data = "data:application/json,%7B%22a%22%3A1%7D";
+  assert.deepEqual((await importerFor({ with: { type: "json" } })(data)).default, { a: 1 });
+  for (const none of [undefined, {}, { with: {} }, { with: undefined }]) {
+    assert.strictEqual(importerFor(none), importerFor(undefined), `${JSON.stringify(none)} means no attributes`);
+  }
+  // Node has no CSS modules; the rejection shows the attribute reached import()
+  await assert.rejects(importerFor({ with: { type: "css" } })("data:text/css,a{}"), /css/);
+  for (const bad of [{ with: { type: "text" } }, { with: { type: "json", mode: "x" } }, { with: { type: 1 } }, { with: "json" }, null, "json"]) {
+    assert.throws(() => importerFor(bad), TypeError, JSON.stringify(bad));
+  }
+});
+
+test("unsupported import attributes reject before anything is imported", async () => {
+  const importer = fakeImporter();
+  const jsonImporter = async () => assert.fail("no package.json is read");
+  const { MPortURL } = createV1({ importerFor: (o) => (importerFor(o), importer), jsonImporter });
+  await assert.rejects(MPortURL()("x@1/y.txt", { with: { type: "text" } }), (e) => e instanceof TypeError && /unsupported import attributes/.test(e.message));
+  await assert.rejects(MPortURL()("x@1", { with: { type: "text" } }), TypeError);
+  assert.equal(importer.calls.length, 0);
+  await MPortURL()("x@1/y.json", { with: { type: "json" } });
+  assert.ok(importer.calls.length > 0, "supported attributes still load");
 });
 
 test("path-less specifiers load package.json and import its ESM entry", async () => {

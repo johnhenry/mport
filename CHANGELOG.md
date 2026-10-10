@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.0.1 — bundler-clean v1 importer (2026-10-10)
+
+### Fixes
+
+- **Rollup and Vite 7 no longer warn when a build imports the package.** The standard entry's v1 importer called
+  `import(url, options)` with a variable `options`, which Rollup cannot analyse, so every build that imported `@johnhenry/mport`
+  printed "could not statically analyze an import attribute" twice, even when it only used the router. Every `import()` now has
+  literal attributes (`src/v1-importer.mjs`); `test/bundle.test.mjs` bundles `.`, `./core` and `./firefox` with Rollup and fails
+  on any warning. #5, `a071472`.
+
+### Behaviour change
+
+- **The v1 API's per-call `importOptions` accept no attributes, `{ with: { type: "json" } }` or `{ with: { type: "css" } }`.**
+  Those work as before. Any other import attributes (another `type`, another key, a non-string value) now reject the
+  `mport()` / `MPort()` / `MPortURL()` call with a `TypeError` before anything is imported, instead of being handed to
+  `import()`. For other attributes, use `createRouter({ importer })`. The Firefox entry still ignores `importOptions`.
+  `docs/api.md` "The v1 API". #5, `a071472`.
+
 ## 0.0.0 — npm scope migration (2026-09-28)
 
 Not published yet: everything in this entry ships as `0.0.0`. Work since the initial build comes first; the initial build itself is under "Initial build" below.
