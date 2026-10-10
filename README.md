@@ -533,7 +533,7 @@ Once the browser has resolved `import "react"` through an import map, there is n
 ## The v1 API
 
 These keep the same signatures as 1.x:
-- `mport(spec, importOptions?)`: the default export
+- `mport(spec, importOptions?)`: the default export; `importOptions` may carry `{ with: { type: "json" } }` or `{ with: { type: "css" } }` (other import attributes reject with a `TypeError`, so that bundlers can analyse every `import()` in the package)
 - `MPort(options | ...origins)`
 - `MPortURL(options | ...origins)`
 - options: `{ cdns, useCache: "localhost", cacheKey }`
@@ -545,7 +545,7 @@ Specifiers are `"name@version[/path]"` or `{ name, version, path }`. With no pat
 
 ## Migrating from 1.x
 
-Nothing you call has been removed. Change the install to `@johnhenry/mport` (the unscoped `mport` stays at 1.0.0). Behaviour changes, all of them bug fixes:
+Nothing you call has been removed. Change the install to `@johnhenry/mport` (the unscoped `mport` stays at 1.0.0). Behaviour changes, all of them bug fixes except the narrower import options:
 
 - **The race waits for the first success.** 1.x used `Promise.race`, so one CDN that failed quickly rejected the whole import.
 - **Scoped names parse correctly.** `"@scope/pkg@1.2.3/x.js"` now works in string form.
@@ -555,6 +555,7 @@ Nothing you call has been removed. Change the install to `@johnhenry/mport` (the
 - **Path-less imports prefer ESM.** They pick the entry from `exports` → `module` → `main`; 1.x used `main` only. This can change which file loads for packages whose `main` is CommonJS.
 - **`MPortURL` returns a third element** (debug info). `[module, url]` destructuring is unaffected.
 - **The npm package ships every file.** The 1.0.0 tarball was missing `config.mjs` and `race-which.mjs`.
+- **Per-call import options are limited to JSON and CSS.** `mport(spec, { with: { type: "json" } })` and `{ type: "css" }` work as before; any other import attributes reject with a `TypeError` instead of reaching `import()`, so that bundlers can analyse the package (0.0.1). Use `createRouter({ importer })` for others.
 
 The default race still mixes builds (raw jsDelivr/unpkg files against jspm's transformed output), because that is what 1.x did. For consistent builds, move to a router such as `createRouter({ "*": race(jsDelivr(), unpkg()) })`.
 

@@ -100,7 +100,12 @@ the owner** (JSR has no API or CLI for creating a scope or package; sign in at h
   semantics (lockfile entry or `options.build`) exactly as documented in `docs/api.md`.
 - **Nothing reachable from `src/firefox.mjs` may contain a two-argument `import()`.**
   Older SpiderMonkey rejects it at parse time; `test/v1.test.mjs` walks the import graph.
-  `import(url, options)` lives only in `src/index.mjs`'s injected importer.
+  Two-argument `import()` lives only in `src/v1-importer.mjs`, which only `src/index.mjs` imports.
+- **Every `import()` with attributes has literal attributes.** `import(url, options)` with a
+  variable `options` makes Rollup (and Vite 7 and older) warn in every consumer's build (#5);
+  `src/v1-importer.mjs` maps v1 import options onto literal branches (none, json, css) and
+  rejects the rest. `test/bundle.test.mjs` bundles each browser entry with Rollup and fails
+  on any warning.
 - **Shared lookups can't take a per-call signal.** Registry lookups and import probes are
   memoized across calls, so `resolve()` races them against the caller's signal
   (`abortable()`), and `fallback()` reports the abort reason, not the node's error
